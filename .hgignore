@@ -1,0 +1,18 @@
+# use glob syntax.
+
+syntax: glob
+
+.git
+
+*.elc
+*.pyc
+*~
+build
+*.mode1v3
+*.pbxuser
+*.xcuserdatad
+*.xcworkspace
+.DS_Store
+
+*\ Data
+
