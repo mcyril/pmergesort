@@ -1,1 +1,77 @@
-PLACEHOLDER
+Parallel in-place/out-of-place merge sort algorithm implementations written in C language
+
+pmergesort.h:
+
+* symmergesort / symmergesort_r
+
+  in-place mergesort based on SymMerge algorithm from Pok-Son Kim and Arne Kutzner,
+  "Stable Minimum Storage Merging by Symmetric Comparisons", in Susanne Albers and
+  Tomasz Radzik, editors, Algorithms - ESA 2004, volume 3221 of Lecture Notes in
+  Computer Science, pages 714-723. Springer, 2004.
+
+  NOTE: parallel if configured
+
+  prototype of regular symmergesort looks like the standard library qsort function:
+
+    void symmergesort(void * base, size_t n, size_t sz,
+                       int (*cmp)(const void *, const void *));
+
+  prototype of reentrant symmergesort_r looks like the standard library qsort_r function:
+
+    void symmergesort_r(void * base, size_t n, size_t sz, void * thunk,
+                        int (*cmp)(void *, const void *, const void *));
+
+* pmergesort / pmergesort_r
+
+  out-of-place mergesort, optimized naïve implementation
+
+  NOTE: parallel if configured
+
+  prototype of regular pmergesort looks like the standard library qsort function:
+
+    void pmergesort(void * base, size_t n, size_t sz,
+                     int (*cmp)(const void *, const void *));
+
+  prototype of reentrant pmergesort_r looks like the standard library qsort_r function:
+
+    void pmergesort_r(void * base, size_t n, size_t sz, void * thunk,
+                       int (*cmp)(void *, const void *, const void *));
+
+* wrapmergesort / wrapmergesort_r
+
+  parallel compound wrapper for generic sort
+
+  NOTE: parallel if configured, else meaningless
+
+  prototype of regular wrapmergesort looks like the standard library qsort function
+  with annex argument of wrapped sort function:
+
+    int wrapmergesort(void * base, size_t n, size_t sz,
+                       int (*cmp)(const void *, const void *),
+                        int (*sort)(void *, size_t, size_t,
+                                     int (*)(const void *, const void *)));
+
+  prototype of reentrant wrapmergesort_r looks like the standard library qsort_r function
+  with annex argument of wrapped sort function:
+
+    int wrapmergesort_r(void * base, size_t n, size_t sz, void * thunk,
+                         int (*cmp)(void *, const void *, const void *),
+                          int (*sort_r)(void *, size_t, size_t, void *,
+                           int (*)(void *, const void *, const void *)));
+
+pmergesort.c:
+
+configure algorithms
+
+  CFG_PARALLEL                enable build parallel merge sort algorithms, default is on
+  CFG_PARALLEL_USE_GCD        enable use of GCD for multi-threading, default is on
+  CFG_PARALLEL_USE_PTHREADS   enable use of pthreads based pool for multi-threading,
+                              default is off
+  CFG_RAW_ACCESS              enable raw memory access, 0 implies the using of memmove &
+                              memcpy, default is on
+  CFG_AGNER_ACCESS            enable Agner Fog asmlib memory access, default is off
+                              http://www.agner.org/optimize/
+
+performance:
+
+  depends on number of CPU cores
