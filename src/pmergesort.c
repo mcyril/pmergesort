@@ -42,13 +42,27 @@
 #endif
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
+/* Mac OS X & platform specific                                                                                               */
+/* -------------------------------------------------------------------------------------------------------------------------- */
+
+#ifdef __APPLE__
+#include <AvailabilityMacros.h>
+#else
+/* sentinel (temporary) */
+#   undef  CFG_PARALLEL_USE_GCD
+#   define CFG_PARALLEL_USE_GCD        0
+#   undef  CFG_PARALLEL_USE_PTHREADS
+#   define CFG_PARALLEL_USE_PTHREADS   1
+#endif
+
+/* -------------------------------------------------------------------------------------------------------------------------- */
 /* parallel fine tunings                                                                                                      */
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
 #if CFG_PARALLEL
 
 #if !CFG_PARALLEL_USE_PTHREADS && CFG_PARALLEL_USE_GCD
-/*  GCD  */
+/*  GCD, assume Mac OS X  */
 #   if !defined(MAC_OS_X_VERSION_10_6) || MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_6
 #   error define CFG_PARALLEL_USE_PTHREADS to use parallel sort with pre-Mac OS X 10.6
 #   endif
@@ -60,12 +74,13 @@
 
 #else
 
+/* sentinel */
 #   undef  CFG_PARALLEL_USE_GCD
 #   define CFG_PARALLEL_USE_GCD        0
 #   undef  CFG_PARALLEL_USE_PTHREADS
 #   define CFG_PARALLEL_USE_PTHREADS   0
 
-#endif
+#endif /* CFG_PARALLEL */
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 /* fine tunings                                                                                                               */
