@@ -98,6 +98,12 @@ Future potential:
 * Can be quite easily made POSIX compatible, but not tested that yet
 * Byte order independent and should be compatible with any CPU architecture, but not tested with big-endian yet
 
+### BUILD
+
+    clang -mmacosx-version-min=10.6 -c pmergesort.c -Ofast -o pmergesort.o
+
+_TODO: makefile_
+
 ### PERFORMANCE
 
 Depends on CPU power/number of cores
