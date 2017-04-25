@@ -314,29 +314,6 @@ typedef struct _pmergesort_pass_context pmergesort_pass_context_t;
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#define IDIV_UP(N, M)               ({ __typeof__(N) __n = (N); __typeof__(M) __m = (M); (__n + (__m - 1)) / __m; })
-#if defined(__clang__) || defined(__GNUC__)
-#define ISIGN(V)                    ({ __typeof__(V) __v = (V); ((__v > 0) - (__v < 0)); })
-#define IABS(V)                     ({ __typeof__(V) __v = (V); (__v < 0 ? -__v : __v); })
-#else
-#error review this implementation for used compiler
-#endif
-
-#define ELT_PTR_OFS(ctx, base, inx) ELT_PTR_((base), (inx), ELT_SZ(ctx))
-#define ELT_PTR_NEXT(ctx, base)     (((void *)(base)) + ELT_SZ(ctx))
-#define ELT_PTR_PREV(ctx, base)     (((void *)(base)) - ELT_SZ(ctx))
-#define ELT_DIST(ctx, a, b)         ELT_DIST_((a), (b), ELT_SZ(ctx))
-
-#define MAKE_STR0(x, y)             x ## y
-#define MAKE_STR1(x, y)             MAKE_STR0(x, y)
-#define MAKE_FNAME0(x, y)           _ ## x ## _ ## y
-#define MAKE_FNAME1(x, y)           MAKE_FNAME0(x, y)
-#define _M(name)                    MAKE_FNAME1(name, SORT_SUFFIX)
-#define _F(name)                    MAKE_STR1(name, SORT_IS_R)
-#define _(name)                     MAKE_FNAME1(name, MAKE_STR1(SORT_SUFFIX, SORT_IS_R))
-
-/* -------------------------------------------------------------------------------------------------------------------------- */
-
 /* -------------------------------------------------------------------------------------------------------------------------- */
 /* memory accessors                                                                                                           */
 /* -------------------------------------------------------------------------------------------------------------------------- */
@@ -643,6 +620,29 @@ static inline void _aux_free(aux_t * aux)
         aux->temp = NULL;
     }
 }
+
+/* -------------------------------------------------------------------------------------------------------------------------- */
+
+#define IDIV_UP(N, M)               ({ __typeof__(N) __n = (N); __typeof__(M) __m = (M); (__n + (__m - 1)) / __m; })
+#if defined(__clang__) || defined(__GNUC__)
+#define ISIGN(V)                    ({ __typeof__(V) __v = (V); ((__v > 0) - (__v < 0)); })
+#define IABS(V)                     ({ __typeof__(V) __v = (V); (__v < 0 ? -__v : __v); })
+#else
+#error review this implementation for the compiler in use
+#endif
+
+#define ELT_PTR_OFS(ctx, base, inx) ELT_PTR_((base), (inx), ELT_SZ(ctx))
+#define ELT_PTR_NEXT(ctx, base)     (((void *)(base)) + ELT_SZ(ctx))
+#define ELT_PTR_PREV(ctx, base)     (((void *)(base)) - ELT_SZ(ctx))
+#define ELT_DIST(ctx, a, b)         ELT_DIST_((a), (b), ELT_SZ(ctx))
+
+#define MAKE_STR0(x, y)             x ## y
+#define MAKE_STR1(x, y)             MAKE_STR0(x, y)
+#define MAKE_FNAME0(x, y)           _ ## x ## _ ## y
+#define MAKE_FNAME1(x, y)           MAKE_FNAME0(x, y)
+#define _M(name)                    MAKE_FNAME1(name, SORT_SUFFIX)
+#define _F(name)                    MAKE_STR1(name, SORT_IS_R)
+#define _(name)                     MAKE_FNAME1(name, MAKE_STR1(SORT_SUFFIX, SORT_IS_R))
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 

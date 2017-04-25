@@ -171,23 +171,23 @@ static inline void _F(insertionsort)(context_t * ctx)
     switch (ctx->sz)
     {
 #if _CFG_USE_4_MEM
-        case 4:
-            _F(_insertionsort_4)(ctx);
-            break;
+    case 4:
+        _F(_insertionsort_4)(ctx);
+        break;
 #endif
 #if _CFG_USE_8_MEM
-        case 8:
-            _F(_insertionsort_8)(ctx);
-            break;
+    case 8:
+        _F(_insertionsort_8)(ctx);
+        break;
 #endif
 #if _CFG_USE_16_MEM
-        case 16:
-            _F(_insertionsort_16)(ctx);
-            break;
+    case 16:
+        _F(_insertionsort_16)(ctx);
+        break;
 #endif
-        default:
-            _F(_insertionsort_sz)(ctx);
-            break;
+    default:
+        _F(_insertionsort_sz)(ctx);
+        break;
     }
 }
 #endif
@@ -200,23 +200,23 @@ static inline void _F(insertionsort_run)(context_t * ctx)
     switch (ctx->sz)
     {
 #if _CFG_USE_4_MEM
-        case 4:
-            _F(_insertionsort_run_4)(ctx);
-            break;
+    case 4:
+        _F(_insertionsort_run_4)(ctx);
+        break;
 #endif
 #if _CFG_USE_8_MEM
-        case 8:
-            _F(_insertionsort_run_8)(ctx);
-            break;
+    case 8:
+        _F(_insertionsort_run_8)(ctx);
+        break;
 #endif
 #if _CFG_USE_16_MEM
-        case 16:
-            _F(_insertionsort_run_16)(ctx);
-            break;
+    case 16:
+        _F(_insertionsort_run_16)(ctx);
+        break;
 #endif
-        default:
-            _F(_insertionsort_run_sz)(ctx);
-            break;
+    default:
+        _F(_insertionsort_run_sz)(ctx);
+        break;
     }
 }
 #endif
@@ -229,23 +229,23 @@ static inline void _F(insertionsort_mergerun)(context_t * ctx)
     switch (ctx->sz)
     {
 #if _CFG_USE_4_MEM
-        case 4:
-            _F(_insertionsort_mergerun_4)(ctx);
-            break;
+    case 4:
+        _F(_insertionsort_mergerun_4)(ctx);
+        break;
 #endif
 #if _CFG_USE_8_MEM
-        case 8:
-            _F(_insertionsort_mergerun_8)(ctx);
-            break;
+    case 8:
+        _F(_insertionsort_mergerun_8)(ctx);
+        break;
 #endif
 #if _CFG_USE_16_MEM
-        case 16:
-            _F(_insertionsort_mergerun_16)(ctx);
-            break;
+    case 16:
+        _F(_insertionsort_mergerun_16)(ctx);
+        break;
 #endif
-        default:
-            _F(_insertionsort_mergerun_sz)(ctx);
-            break;
+    default:
+        _F(_insertionsort_mergerun_sz)(ctx);
+        break;
     }
 }
 #endif

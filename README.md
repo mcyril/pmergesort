@@ -102,7 +102,7 @@ Future potential:
 
 Depends on CPU power/number of cores
 
-Performance:
+Time complexity:
 
 * **symmergesort** performance (as per single threaded algorithm) is better than O(N*log(N)^2)
 * **pmergesort** performance (as per single threaded algorithm) is about standard O(N*log(N))
