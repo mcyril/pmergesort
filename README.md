@@ -62,19 +62,15 @@ Configure algorithm parameters/settings using pre-processor directives (0 is ‘
 
 * **CFG\_PARALLEL**
     * enable build parallel merge sort algorithms, default is on
-
 * **CFG\_PARALLEL\_USE\_GCD**
     * enable use of GCD for multi-threading, default is on
-
 * **CFG\_PARALLEL\_USE\_PTHREADS**
     * enable use of pthreads based pool for multi-threading, default is off
-
 * **CFG\_RAW\_ACCESS**
     * enable raw memory access (faster but might be unsafe, especially for unaligned memory blocks)
     * off - implies the using of memmove and memcpy
     * on - use raw memory access
     * default is on
-
 * **CFG\_AGNER\_ACCESS**
     * enable Agner Fog asmlib memory access, default is off, [http://www.agner.org/optimize/](http://www.agner.org/optimize/) (mostly as example of alternative memory management integration, do not expect performance improvement with it)
 
@@ -93,7 +89,7 @@ Algorithms fine tuning and tweaks using pre-processor directives:
 * **\_CFG\_BLOCKLEN\_SYMMERGE**
 * **\_CFG\_BLOCKLEN\_MERGE**
 
-### Supported Platforms
+### SUPPORTED PLATFORMS
 
 Source code has been built and tested on Mac OS X (10.5 - 10.12) only.
 
@@ -102,7 +98,7 @@ Future potential:
 * Can be quite easily made POSIX compatible, but not tested that yet
 * Byte order independent and should be compatible with any CPU architecture, but not tested with big-endian yet
 
-### Performance
+### PERFORMANCE
 
 Depends on CPU power/number of cores
 
