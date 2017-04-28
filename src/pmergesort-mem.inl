@@ -24,8 +24,8 @@ static inline void _M(reverse)(void * lo, void * hi, size_t sz)
     while (lo < hi)
     {
         _M(swap)(lo, hi, sz);
-        lo = ELT_PTR_(lo, 1, sz);
-        hi = ELT_PTR_(hi, -1, sz);
+        lo = ELT_PTR_FWD_(lo, 1, sz);
+        hi = ELT_PTR_BCK_(hi, 1, sz);
     }
 }
 
@@ -58,7 +58,7 @@ static inline void _M(rotate)(void * lo, void * mid, void * hi, size_t sz)
 
             _M(copy)(lo, t, i, sz);
             _M(move_left)(mid, j, i, sz);
-            _M(copy)(t, ELT_PTR_(hi, -i, sz), i, sz);
+            _M(copy)(t, ELT_PTR_BCK_(hi, i, sz), i, sz);
         }
         else
         {
@@ -68,17 +68,17 @@ static inline void _M(rotate)(void * lo, void * mid, void * hi, size_t sz)
             {
                 if (i > j)
                 {
-                    _M(swap_r)(ELT_PTR_(mid, -i, sz), mid, j, sz);
+                    _M(swap_r)(ELT_PTR_BCK_(mid, i, sz), mid, j, sz);
                     i -= j;
                 }
                 else
                 {
-                    _M(swap_r)(ELT_PTR_(mid, -i, sz), ELT_PTR_(mid, j - i, sz), i, sz);
+                    _M(swap_r)(ELT_PTR_BCK_(mid, i, sz), ELT_PTR_FWD_(mid, j - i, sz), i, sz);
                     j -= i;
                 }
             }
 
-            _M(swap_r)(ELT_PTR_(mid, -i, sz), mid, i, sz);
+            _M(swap_r)(ELT_PTR_BCK_(mid, i, sz), mid, i, sz);
         }
     }
 }
@@ -128,7 +128,7 @@ static inline void _M(rotate_aux)(void * lo, void * mid, void * hi, size_t sz, a
 
                 _M(copy)(lo, t, i, sz);
                 _M(move_left)(mid, j, i, sz);
-                _M(copy)(t, ELT_PTR_(hi, -i, sz), i, sz);
+                _M(copy)(t, ELT_PTR_BCK_(hi, i, sz), i, sz);
             }
             else
             {
@@ -139,7 +139,7 @@ static inline void _M(rotate_aux)(void * lo, void * mid, void * hi, size_t sz, a
 
                 _M(copy)(lo, tmp, i, sz);
                 _M(move_left)(mid, j, i, sz);
-                _M(copy)(tmp, ELT_PTR_(hi, -i, sz), i, sz);
+                _M(copy)(tmp, ELT_PTR_BCK_(hi, i, sz), i, sz);
             }
         }
     }

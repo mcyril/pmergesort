@@ -13,13 +13,15 @@
 
 #define ELT_SZ(ctx)                 4
 #define ELT_OF_SZ(n, sz)            ((n) << 2)
-#define ELT_PTR_(base, inx, sz)     ({ __typeof__(inx) __inx = (inx); ((void *)(base)) + ISIGN(__inx) * (IABS(__inx) << 2); })
+#define ELT_PTR_FWD_(base, inx, sz) ({ __typeof__(inx) __inx = (inx); ((void *)(base)) + (__inx << 2); })
+#define ELT_PTR_BCK_(base, inx, sz) ({ __typeof__(inx) __inx = (inx); ((void *)(base)) - (__inx << 2); })
 #define ELT_DIST_(a, b, sz)         ((((void *)(a)) - ((void *)(b))) >> 2)
 
 #include "pmergesort-core.inl"
 
 #undef ELT_DIST_
-#undef ELT_PTR_
+#undef ELT_PTR_FWD_
+#undef ELT_PTR_BCK_
 #undef ELT_OF_SZ
 #undef ELT_SZ
 
@@ -35,13 +37,15 @@
 
 #define ELT_SZ(ctx)                 8
 #define ELT_OF_SZ(n, sz)            ((n) << 3)
-#define ELT_PTR_(base, inx, sz)     ({ __typeof__(inx) __inx = (inx); ((void *)(base)) + ISIGN(__inx) * (IABS(__inx) << 3); })
+#define ELT_PTR_FWD_(base, inx, sz) ({ __typeof__(inx) __inx = (inx); ((void *)(base)) + (__inx << 3); })
+#define ELT_PTR_BCK_(base, inx, sz) ({ __typeof__(inx) __inx = (inx); ((void *)(base)) - (__inx << 3); })
 #define ELT_DIST_(a, b, sz)         ((((void *)(a)) - ((void *)(b))) >> 3)
 
 #include "pmergesort-core.inl"
 
 #undef ELT_DIST_
-#undef ELT_PTR_
+#undef ELT_PTR_FWD_
+#undef ELT_PTR_BCK_
 #undef ELT_OF_SZ
 #undef ELT_SZ
 
@@ -57,13 +61,15 @@
 
 #define ELT_SZ(ctx)                 16
 #define ELT_OF_SZ(n, sz)            ((n) << 4)
-#define ELT_PTR_(base, inx, sz)     ({ __typeof__(inx) __inx = (inx); ((void *)(base)) + ISIGN(__inx) * (IABS(__inx) << 4); })
+#define ELT_PTR_FWD_(base, inx, sz) ({ __typeof__(inx) __inx = (inx); ((void *)(base)) + (__inx << 4); })
+#define ELT_PTR_BCK_(base, inx, sz) ({ __typeof__(inx) __inx = (inx); ((void *)(base)) - (__inx << 4); })
 #define ELT_DIST_(a, b, sz)         ((((void *)(a)) - ((void *)(b))) >> 4)
 
 #include "pmergesort-core.inl"
 
 #undef ELT_DIST_
-#undef ELT_PTR_
+#undef ELT_PTR_FWD_
+#undef ELT_PTR_BCK_
 #undef ELT_OF_SZ
 #undef ELT_SZ
 
@@ -77,13 +83,15 @@
 
 #define ELT_SZ(ctx)                 (ctx)->sz
 #define ELT_OF_SZ(n, sz)            ((sz) * (n))
-#define ELT_PTR_(base, inx, sz)     (((void *)(base)) + (sz) * (inx))
+#define ELT_PTR_FWD_(base, inx, sz) (((void *)(base)) + (sz) * (inx))
+#define ELT_PTR_BCK_(base, inx, sz) (((void *)(base)) - (sz) * (inx))
 #define ELT_DIST_(a, b, sz)         ((((void *)(a)) - ((void *)(b))) / (sz))
 
 #include "pmergesort-core.inl"
 
 #undef ELT_DIST_
-#undef ELT_PTR_
+#undef ELT_PTR_FWD_
+#undef ELT_PTR_BCK_
 #undef ELT_OF_SZ
 #undef ELT_SZ
 

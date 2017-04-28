@@ -28,7 +28,7 @@ static inline void _M(copy)(void * src, void * dst, size_t n, size_t sz)
 /* -------------------------------------------------------------------------------------------------------------------------- */
 static inline void _M(move_right)(void * a, size_t n, size_t m, size_t sz)
 {
-    _region_move_right(a, ELT_PTR_(a, m, sz), ELT_OF_SZ(n, sz));
+    _region_move_right(a, ELT_PTR_FWD_(a, m, sz), ELT_OF_SZ(n, sz));
 }
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
@@ -36,7 +36,7 @@ static inline void _M(move_right)(void * a, size_t n, size_t m, size_t sz)
 /* -------------------------------------------------------------------------------------------------------------------------- */
 static inline void _M(move_left)(void * a, size_t n, size_t m, size_t sz)
 {
-    _region_move_left(a, ELT_PTR_(a, -m, sz), ELT_OF_SZ(n, sz));
+    _region_move_left(a, ELT_PTR_BCK_(a, m, sz), ELT_OF_SZ(n, sz));
 }
 
 /* -------------------------------------------------------------------------------------------------------------------------- */

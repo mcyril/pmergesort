@@ -16,7 +16,7 @@ static inline void * _(ip)(void * key, void * lo, void * hi, int sense, context_
     {
         size_t half = lim >> 1;
 
-        void * mid = ELT_PTR_OFS(ctx, lo, half);
+        void * mid = ELT_PTR_FWD(ctx, lo, half);
 
         int result = CALL_CMP(ctx, key, mid);
         if (result > sense)
@@ -43,8 +43,8 @@ static inline void * _(ip_sym)(void * sym, void * lo, void * hi, context_t * ctx
     {
         size_t half = lim >> 1;
 
-        void * mid = ELT_PTR_OFS(ctx, lo, half);
-        void * sym_mid = ELT_PTR_OFS(ctx, sym, -half);
+        void * mid = ELT_PTR_FWD(ctx, lo, half);
+        void * sym_mid = ELT_PTR_BCK(ctx, sym, half);
 
         int result = CALL_CMP(ctx, mid, sym_mid);
         if (result <= 0)
@@ -83,11 +83,17 @@ static inline void _(inplace_merge_r2l)(void * lo, void * mi, void * hi, context
         /* one iteration case:
             [X X Zi X X] [Zq Y Y] => [X X Zi Zq X X] [Y Y] */
 
+        /* total length */
+        size_t len = ELT_DIST(ctx, hi, lo);
+
         /* look for insertion point */
 
         void * ins;
 
-        if (ELT_DIST(ctx, mi, lo) < _CFG_MIN_SUBMERGELEN2)
+        /* left segment size */
+        size_t llen = ELT_DIST(ctx, mi, lo);
+
+        if (llen < _CFG_MIN_SUBMERGELEN2)
         {
             /* linear search */
             ins = mi;
@@ -111,8 +117,11 @@ static inline void _(inplace_merge_r2l)(void * lo, void * mi, void * hi, context
 
         /* look for source bounds */
 
+        /* right segment size */
+        size_t rlen = len - llen;
+
         void * nmi;
-        if (ELT_DIST(ctx, hi, mi) < _CFG_MIN_SUBMERGELEN2)
+        if (rlen < _CFG_MIN_SUBMERGELEN2)
         {
             /* linear search */
             nmi = ELT_PTR_NEXT(ctx, mi);
@@ -136,7 +145,7 @@ static inline void _(inplace_merge_r2l)(void * lo, void * mi, void * hi, context
 
         /* advance */
 
-        lo = ELT_PTR_OFS(ctx, ins, ELT_DIST(ctx, nmi, mi));
+        lo = ELT_PTR_FWD(ctx, ins, ELT_DIST(ctx, nmi, mi));
         mi = nmi;
     }
 }
@@ -159,13 +168,19 @@ static inline void _(inplace_merge_l2r)(void * lo, void * mi, void * hi, context
         /* one iteration case:
             [X X Zq] [Y Y Zi Y Y] => [X X] [Y Y Zq Zi Y Y] */
 
+        /* total length */
+        size_t len = ELT_DIST(ctx, hi, lo);
+
         void * pmi = ELT_PTR_PREV(ctx, mi);
 
         /* look for insertion point */
 
         void * ins;
 
-        if (ELT_DIST(ctx, hi, mi) < _CFG_MIN_SUBMERGELEN2)
+        /* right segment size */
+        size_t rlen = ELT_DIST(ctx, hi, mi);
+
+        if (rlen < _CFG_MIN_SUBMERGELEN2)
         {
             /* linear search */
             ins = mi;
@@ -190,7 +205,10 @@ static inline void _(inplace_merge_l2r)(void * lo, void * mi, void * hi, context
 
         void * pins = ELT_PTR_PREV(ctx, ins);
 
-        if (ELT_DIST(ctx, mi, lo) < _CFG_MIN_SUBMERGELEN2)
+        /* left segment size */
+        size_t llen = len - rlen;
+
+        if (llen < _CFG_MIN_SUBMERGELEN2)
         {
             /* linear search */
             while (lo < pmi)
@@ -214,7 +232,7 @@ static inline void _(inplace_merge_l2r)(void * lo, void * mi, void * hi, context
 
         /* advance */
 
-        hi = ELT_PTR_OFS(ctx, ins, -ELT_DIST(ctx, mi, pmi));
+        hi = ELT_PTR_BCK(ctx, ins, ELT_DIST(ctx, mi, pmi));
         mi = pmi;
     }
 }
@@ -286,23 +304,23 @@ static void _(inplace_symmerge)(void * lo, void * mi, void * hi, context_t * ctx
 
         /* else perform modified SymMerge algorithm */
 
-        void * mid = ELT_PTR_OFS(ctx, lo, len >> 1);
-        void * bound = ELT_PTR_OFS(ctx, mid, llen);
+        void * mid = ELT_PTR_FWD(ctx, lo, len >> 1);
+        void * bound = ELT_PTR_FWD(ctx, mid, llen);
 
         void * start;
 
         if (mid < mi) /* llen > rlen */
         {
-            void * lbound = ELT_PTR_OFS(ctx, bound, -len);
-            start = _(ip_sym)(ELT_PTR_PREV(ctx, hi), lbound, ELT_PTR_OFS(ctx, lbound, rlen), ctx);
+            void * lbound = ELT_PTR_BCK(ctx, bound, len);
+            start = _(ip_sym)(ELT_PTR_PREV(ctx, hi), lbound, ELT_PTR_FWD(ctx, lbound, rlen), ctx);
         }
         else /* llen <= rlen */
         {
             start = _(ip_sym)(ELT_PTR_PREV(ctx, bound), lo, mi, ctx);
         }
 
-/*      void * end = ELT_PTR_OFS(ctx, bound, -ELT_DIST(ctx, start, lo)); */
-        void * end = ELT_PTR_OFS(ctx, lo, ELT_DIST(ctx, bound, start));
+/*      void * end = ELT_PTR_BCK(ctx, bound, ELT_DIST(ctx, start, lo)); */
+        void * end = ELT_PTR_FWD(ctx, lo, ELT_DIST(ctx, bound, start));
 
         /* rotate side-changing elements */
 
@@ -374,23 +392,23 @@ static __attribute__((unused)) void _(aux_symmerge)(void * lo, void * mi, void *
 
         /* else perform modified SymMerge algorithm */
 
-        void * mid = ELT_PTR_OFS(ctx, lo, len >> 1);
-        void * bound = ELT_PTR_OFS(ctx, mid, llen);
+        void * mid = ELT_PTR_FWD(ctx, lo, len >> 1);
+        void * bound = ELT_PTR_FWD(ctx, mid, llen);
 
         void * start;
 
         if (mid < mi) /* llen > rlen */
         {
-            void * lbound = ELT_PTR_OFS(ctx, bound, -len);
-            start = _(ip_sym)(ELT_PTR_PREV(ctx, hi), lbound, ELT_PTR_OFS(ctx, lbound, rlen), ctx);
+            void * lbound = ELT_PTR_BCK(ctx, bound, len);
+            start = _(ip_sym)(ELT_PTR_PREV(ctx, hi), lbound, ELT_PTR_FWD(ctx, lbound, rlen), ctx);
         }
         else /* llen <= rlen */
         {
             start = _(ip_sym)(ELT_PTR_PREV(ctx, bound), lo, mi, ctx);
         }
 
-/*      void * end = ELT_PTR_OFS(ctx, bound, -ELT_DIST(ctx, start, lo)); */
-        void * end = ELT_PTR_OFS(ctx, lo, ELT_DIST(ctx, bound, start));
+/*      void * end = ELT_PTR_BCK(ctx, bound, ELT_DIST(ctx, start, lo)); */
+        void * end = ELT_PTR_FWD(ctx, lo, ELT_DIST(ctx, bound, start));
 
         /* rotate side-changing elements */
 
@@ -451,16 +469,19 @@ static inline void _(aux_merge_r)(void * lo, void * mi, void * hi, context_t * c
 
     /* merge from left to right */
 
-    void * dst = ELT_PTR_PREV(ctx, hi);
+    void * dst = hi;
 
     void * lsrclo = lo;
     void * lsrchi = ELT_PTR_PREV(ctx, mi);
 
     void * rsrclo = tmp;
-    void * rsrchi = ELT_PTR_OFS(ctx, tmp, rsz - 1);
+    void * rsrchi = ELT_PTR_FWD(ctx, tmp, rsz - 1);
 
+    /* merge */
     while (lsrchi >= lsrclo && rsrchi >= rsrclo)
     {
+        dst = ELT_PTR_PREV(ctx, dst);
+
         int rc = CALL_CMP(ctx, lsrchi, rsrchi);
         if (rc > 0)
         {
@@ -472,16 +493,14 @@ static inline void _(aux_merge_r)(void * lo, void * mi, void * hi, context_t * c
             _M(copy)(rsrchi, dst, 1, sz);
             rsrchi = ELT_PTR_PREV(ctx, rsrchi);
         }
-
-        dst = ELT_PTR_PREV(ctx, dst);
     }
 
     /* copy right tail from temporary storage */
     if (rsrchi >= rsrclo)
     {
-        size_t tailsz = ELT_DIST(ctx, rsrchi, rsrclo);
+        size_t tailsz = ELT_DIST(ctx, rsrchi, rsrclo) + 1;
 
-        _M(copy)(rsrclo, ELT_PTR_OFS(ctx, dst, -tailsz), tailsz + 1, sz);
+        _M(copy)(rsrclo, ELT_PTR_BCK(ctx, dst, tailsz), tailsz, sz);
     }
 
     /* no need to copy from left to self */
@@ -517,7 +536,7 @@ static inline void _(aux_merge_l)(void * lo, void * mi, void * hi, context_t * c
     void * dst = lo;
 
     void * lsrclo = tmp;
-    void * lsrchi = ELT_PTR_OFS(ctx, tmp, lsz);
+    void * lsrchi = ELT_PTR_FWD(ctx, tmp, lsz);
 
     void * rsrclo = mi;
     void * rsrchi = hi;
@@ -767,9 +786,9 @@ void _(sort_chunk_pass)(void * arg, size_t chunk)
 
     int last = (chunk < pass_ctx->numchunks - 1) ? 0 : 1;
 
-    void * a = ELT_PTR_OFS(pass_ctx->ctx, pass_ctx->lo, pass_ctx->chunksz * chunk);
-    void * b = ELT_PTR_OFS(pass_ctx->ctx, a, pass_ctx->bsz);
-    void * c = last == 0 ? ELT_PTR_OFS(pass_ctx->ctx, a, pass_ctx->chunksz) : pass_ctx->hi;
+    void * a = ELT_PTR_FWD(pass_ctx->ctx, pass_ctx->lo, pass_ctx->chunksz * chunk);
+    void * b = ELT_PTR_FWD(pass_ctx->ctx, a, pass_ctx->bsz);
+    void * c = last == 0 ? ELT_PTR_FWD(pass_ctx->ctx, a, pass_ctx->chunksz) : pass_ctx->hi;
 
     while (b <= c)
     {
@@ -778,7 +797,7 @@ void _(sort_chunk_pass)(void * arg, size_t chunk)
             return;
 
         a = b;
-        b = ELT_PTR_OFS(pass_ctx->ctx, b, pass_ctx->bsz);
+        b = ELT_PTR_FWD(pass_ctx->ctx, b, pass_ctx->bsz);
     }
 
     if (last != 0)
@@ -796,22 +815,22 @@ void _(merge_chunks_pass)(void * arg, size_t chunk)
 
     int last = (chunk < pass_ctx->numchunks - 1) ? 0 : 1;
 
-    void * a = ELT_PTR_OFS(pass_ctx->ctx, pass_ctx->lo, pass_ctx->chunksz * chunk);
-    void * b = ELT_PTR_OFS(pass_ctx->ctx, a, pass_ctx->dbl_bsz);
-    void * c = last == 0 ? ELT_PTR_OFS(pass_ctx->ctx, a, pass_ctx->chunksz) : pass_ctx->hi;
+    void * a = ELT_PTR_FWD(pass_ctx->ctx, pass_ctx->lo, pass_ctx->chunksz * chunk);
+    void * b = ELT_PTR_FWD(pass_ctx->ctx, a, pass_ctx->dbl_bsz);
+    void * c = last == 0 ? ELT_PTR_FWD(pass_ctx->ctx, a, pass_ctx->chunksz) : pass_ctx->hi;
 
     while (b <= c)
     {
-        pass_ctx->effector(a, ELT_PTR_OFS(pass_ctx->ctx, a, pass_ctx->bsz), b, pass_ctx->ctx, aux);
+        pass_ctx->effector(a, ELT_PTR_FWD(pass_ctx->ctx, a, pass_ctx->bsz), b, pass_ctx->ctx, aux);
         if (aux->rc != 0)
             return;
 
         a = b;
-        b = ELT_PTR_OFS(pass_ctx->ctx, b, pass_ctx->dbl_bsz);
+        b = ELT_PTR_FWD(pass_ctx->ctx, b, pass_ctx->dbl_bsz);
     }
 
     if (last != 0)
-        pass_ctx->effector(a, ELT_PTR_OFS(pass_ctx->ctx, a, pass_ctx->bsz), c, pass_ctx->ctx, aux);
+        pass_ctx->effector(a, ELT_PTR_FWD(pass_ctx->ctx, a, pass_ctx->bsz), c, pass_ctx->ctx, aux);
 }
 
 #if CFG_PARALLEL_USE_PTHREADS
@@ -838,7 +857,7 @@ static inline int _(pmergesort_impl)(context_t * ctx)
     memset(auxes, 0, sizeof(auxes));
 
     void * lo = (void *)ctx->base;
-    void * hi = ELT_PTR_OFS(ctx, lo, ctx->n);
+    void * hi = ELT_PTR_FWD(ctx, lo, ctx->n);
 
     size_t bsz = ctx->bsize;
     size_t npercpu = ctx->npercpu;
@@ -967,7 +986,7 @@ static inline int _(pmergesort_impl)(context_t * ctx)
     memset(auxes, 0, sizeof(auxes));
 
     void * lo = (void *)ctx->base;
-    void * hi = ELT_PTR_OFS(ctx, lo, ctx->n);
+    void * hi = ELT_PTR_FWD(ctx, lo, ctx->n);
 
     size_t bsz = ctx->bsize;
     size_t npercpu = ctx->npercpu;
@@ -1074,12 +1093,12 @@ bail_out:;
 static inline void _(symmergesort)(context_t * ctx)
 {
 #if CFG_PARALLEL
-    if (ctx->ncpu > 1)
+    for (int ncpu = ctx->ncpu; ncpu > 1; ncpu--)
     {
-        size_t npercpu = IDIV_UP(ctx->n, ctx->ncpu);
+        size_t npercpu = IDIV_UP(ctx->n, ncpu);
         if (npercpu > _CFG_BLOCKLEN_MTHRESHOLD * _CFG_BLOCKLEN_SYMMERGE)
         {
-            /* use parallel when at least two cores & have long enough array */
+            /* use parallel when have a long enough array could be distributed by cores */
 
             /* pre-set initial pass values */
             ctx->npercpu = npercpu;
@@ -1096,19 +1115,19 @@ static inline void _(symmergesort)(context_t * ctx)
 #endif
 
     void * lo = (void *)ctx->base;
-    void * hi = ELT_PTR_OFS(ctx, lo, ctx->n);
+    void * hi = ELT_PTR_FWD(ctx, lo, ctx->n);
 
     size_t bsz = _CFG_BLOCKLEN_SYMMERGE;
 
     void * a = lo;
-    void * b = ELT_PTR_OFS(ctx, a, bsz);
+    void * b = ELT_PTR_FWD(ctx, a, bsz);
 
     while (b <= hi)
     {
         _(_CFG_PRESORT)(a, a, b, ctx, NULL);
 
         a = b;
-        b = ELT_PTR_OFS(ctx, b, bsz);
+        b = ELT_PTR_FWD(ctx, b, bsz);
     }
 
     _(_CFG_PRESORT)(a, a, hi, ctx, NULL);
@@ -1118,17 +1137,17 @@ static inline void _(symmergesort)(context_t * ctx)
         size_t bsz1 = bsz << 1;
 
         a = lo;
-        b = ELT_PTR_OFS(ctx, a, bsz1);
+        b = ELT_PTR_FWD(ctx, a, bsz1);
 
         while (b <= hi)
         {
-            _(inplace_symmerge)(a, ELT_PTR_OFS(ctx, a, bsz), b, ctx, NULL);
+            _(inplace_symmerge)(a, ELT_PTR_FWD(ctx, a, bsz), b, ctx, NULL);
 
             a = b;
-            b = ELT_PTR_OFS(ctx, b, bsz1);
+            b = ELT_PTR_FWD(ctx, b, bsz1);
         }
 
-        _(inplace_symmerge)(a, ELT_PTR_OFS(ctx, a, bsz), hi, ctx, NULL);
+        _(inplace_symmerge)(a, ELT_PTR_FWD(ctx, a, bsz), hi, ctx, NULL);
 
         bsz = bsz1;
     }
@@ -1143,12 +1162,12 @@ static inline void _(symmergesort)(context_t * ctx)
 static inline int _(pmergesort)(context_t * ctx)
 {
 #if CFG_PARALLEL
-    if (ctx->ncpu > 1)
+    for (int ncpu = ctx->ncpu; ncpu > 1; ncpu--)
     {
-        size_t npercpu = IDIV_UP(ctx->n, ctx->ncpu);
+        size_t npercpu = IDIV_UP(ctx->n, ncpu);
         if (npercpu > _CFG_BLOCKLEN_MTHRESHOLD * _CFG_BLOCKLEN_MERGE)
         {
-            /* use parallel when at least two cores & have long enough array */
+            /* use parallel when have a long enough array could be distributed by cores */
 
             /* pre-set initial pass values */
             ctx->npercpu = npercpu;
@@ -1163,19 +1182,19 @@ static inline int _(pmergesort)(context_t * ctx)
 #endif
 
     void * lo = (void *)ctx->base;
-    void * hi = ELT_PTR_OFS(ctx, lo, ctx->n);
+    void * hi = ELT_PTR_FWD(ctx, lo, ctx->n);
 
     size_t bsz = _CFG_BLOCKLEN_MERGE;
 
     void * a = lo;
-    void * b = ELT_PTR_OFS(ctx, a, bsz);
+    void * b = ELT_PTR_FWD(ctx, a, bsz);
 
     while (b <= hi)
     {
         _(_CFG_PRESORT)(a, a, b, ctx, NULL);
 
         a = b;
-        b = ELT_PTR_OFS(ctx, b, bsz);
+        b = ELT_PTR_FWD(ctx, b, bsz);
     }
 
     _(_CFG_PRESORT)(a, a, hi, ctx, NULL);
@@ -1188,19 +1207,19 @@ static inline int _(pmergesort)(context_t * ctx)
         size_t bsz1 = bsz << 1;
 
         a = lo;
-        b = ELT_PTR_OFS(ctx, a, bsz1);
+        b = ELT_PTR_FWD(ctx, a, bsz1);
 
         while (b <= hi)
         {
-            _(aux_merge)(a, ELT_PTR_OFS(ctx, a, bsz), b, ctx, &aux);
+            _(aux_merge)(a, ELT_PTR_FWD(ctx, a, bsz), b, ctx, &aux);
             if (aux.rc != 0)
                 goto bail_out;
 
             a = b;
-            b = ELT_PTR_OFS(ctx, b, bsz1);
+            b = ELT_PTR_FWD(ctx, b, bsz1);
         }
 
-        _(aux_merge)(a, ELT_PTR_OFS(ctx, a, bsz), hi, ctx, &aux);
+        _(aux_merge)(a, ELT_PTR_FWD(ctx, a, bsz), hi, ctx, &aux);
         if (aux.rc != 0)
             goto bail_out;
 
@@ -1227,12 +1246,12 @@ static __attribute__((unused)) void _(wrap_sort)(void * lo, __unused void * mi, 
 static inline int _(wrapmergesort)(context_t * ctx)
 {
 #if CFG_PARALLEL
-    if (ctx->ncpu > 1)
+    for (int ncpu = ctx->ncpu; ncpu > 1; ncpu--)
     {
-        size_t npercpu = IDIV_UP(ctx->n, ctx->ncpu);
+        size_t npercpu = IDIV_UP(ctx->n, ncpu);
         if (npercpu > 2 * _CFG_BLOCKLEN_MTHRESHOLD * _CFG_BLOCKLEN_SYMMERGE)
         {
-            /* use parallel when at least two cores & have long enough array */
+            /* use parallel when have a long enough array could be distributed by cores */
 
             /* pre-set initial pass values */
             ctx->npercpu = npercpu;
@@ -1261,7 +1280,7 @@ static inline int _(wrapmergesort)(context_t * ctx)
 static inline void _(insertionsort)(context_t * ctx)
 {
     void * lo = (void *)ctx->base;
-    void * hi = ELT_PTR_OFS(ctx, lo, ctx->n);
+    void * hi = ELT_PTR_FWD(ctx, lo, ctx->n);
 
     _(binsort)(lo, lo, hi, ctx, NULL);
 }
@@ -1271,7 +1290,7 @@ static inline void _(insertionsort)(context_t * ctx)
 static inline void _(insertionsort_run)(context_t * ctx)
 {
     void * lo = (void *)ctx->base;
-    void * hi = ELT_PTR_OFS(ctx, lo, ctx->n);
+    void * hi = ELT_PTR_FWD(ctx, lo, ctx->n);
 
     _(binsort_run)(lo, lo, hi, ctx, NULL);
 }
@@ -1281,7 +1300,7 @@ static inline void _(insertionsort_run)(context_t * ctx)
 static inline void _(insertionsort_mergerun)(context_t * ctx)
 {
     void * lo = (void *)ctx->base;
-    void * hi = ELT_PTR_OFS(ctx, lo, ctx->n);
+    void * hi = ELT_PTR_FWD(ctx, lo, ctx->n);
 
     _(binsort_mergerun)(lo, lo, hi, ctx, NULL);
 }

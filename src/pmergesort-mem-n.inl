@@ -50,8 +50,8 @@ static inline void _M(move_right)(void * a, size_t n, size_t m, size_t sz)
 {
     if (n <= 8)
     {
-        ELT_TYPE * src = ELT_PTR_(a, n - 1, sz);
-        ELT_TYPE * dst = ELT_PTR_(src, m, sz);
+        ELT_TYPE * src = ELT_PTR_FWD_(a, n - 1, sz);
+        ELT_TYPE * dst = ELT_PTR_FWD_(src, m, sz);
 
         switch (n)
         {
@@ -69,7 +69,7 @@ static inline void _M(move_right)(void * a, size_t n, size_t m, size_t sz)
         }
     }
     else
-        _region_move_right(a, ELT_PTR_(a, m, sz), ELT_OF_SZ(n, sz));
+        _region_move_right(a, ELT_PTR_FWD_(a, m, sz), ELT_OF_SZ(n, sz));
 }
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
@@ -78,7 +78,7 @@ static inline void _M(move_right)(void * a, size_t n, size_t m, size_t sz)
 static inline void _M(move_left)(void * a, size_t n, size_t m, size_t sz)
 {
     ELT_TYPE * src = a;
-    ELT_TYPE * dst = ELT_PTR_(a, -m, sz);
+    ELT_TYPE * dst = ELT_PTR_BCK_(a, m, sz);
 
     switch (n)
     {

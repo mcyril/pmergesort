@@ -86,8 +86,10 @@
 /* fine tunings                                                                                                               */
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#define _CFG_QUEUE_OVERCOMMIT       1   /* use private GCD queue attribute to force number of threads,
+#ifndef _CFG_QUEUE_OVERCOMMIT
+#define _CFG_QUEUE_OVERCOMMIT       0   /* use private GCD queue attribute to force number of threads,
                                             see Apple Co. CoreFoundation source */
+#endif
 
 #define _CFG_PRESORT                binsort_run     /* method of pre-sort for initial subsegments,
                                                         allowed: binsort, binsort_run, and binsort_mergerun */
@@ -104,7 +106,7 @@
 #define _CFG_MIN_SUBMERGELEN2       4   /* threshold to fallback from binary to linear search
                                             for short left/right segment merging */
 
-#define _CFG_BLOCKLEN_MTHRESHOLD    4
+#define _CFG_BLOCKLEN_MTHRESHOLD    16
 #define _CFG_BLOCKLEN_SYMMERGE      32  /* 20 was as in built-in GO language function */
 #define _CFG_BLOCKLEN_MERGE         32
 
@@ -113,23 +115,40 @@
 typedef struct thr_pool thr_pool_t;
 
 #if CFG_PARALLEL
-#if 1
+#ifdef __APPLE__
 #include <sys/sysctl.h>
+#elif __hpux
+#include <sys/mpctl.h>
+#elif __sgi
+#include <unistd.h>
+#elif _WIN32
+#   error not yet
 #else
 #include <unistd.h>
 #endif
 
 static int32_t _ncpu = -1;
 
+#if CFG_CORE_PROFILE
+/*
+ * override number of CPU for benchmark purposes
+ * (may have sense for GCD at the moment)
+ */
+void pmergesort_nCPU(int32_t ncpu)
+{
+    _ncpu = ncpu;
+}
+#endif
+
 #if CFG_PARALLEL_USE_PTHREADS
 #define _CFG_ONCE_ARG   void
 #elif CFG_PARALLEL_USE_GCD
-#define _CFG_ONCE_ARG    void * ctx
+#define _CFG_ONCE_ARG   void * ctx
 #endif
 
 static void __numCPU_initialize(_CFG_ONCE_ARG)
 {
-#if 1
+#ifdef __APPLE__
     int32_t mib[] = { CTL_HW, HW_AVAILCPU };
 
     size_t sz = sizeof(_ncpu);
@@ -137,6 +156,18 @@ static void __numCPU_initialize(_CFG_ONCE_ARG)
         _ncpu = 1;
     else if (_ncpu <= 0)
         _ncpu = 1;
+#elif __hpux
+    int ncpu = mpctl(MPC_GETNUMSPUS, NULL, NULL);
+    if (ncpu <= 0)
+        _ncpu = 1;
+    else
+        _ncpu = (int32_t)ncpu;
+#elif __sgi
+    long ncpu = sysconf(_SC_NPROC_ONLN);
+    if (ncpu <= 0)
+        _ncpu = 1;
+    else
+        _ncpu = (int32_t)ncpu;
 #else
     long ncpu = sysconf(_SC_NPROCESSORS_ONLN);
     if (ncpu <= 0)
@@ -639,14 +670,10 @@ static inline void _aux_free(aux_t * aux)
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
 #define IDIV_UP(N, M)               ({ __typeof__(N) __n = (N); __typeof__(M) __m = (M); (__n + (__m - 1)) / __m; })
-#if defined(__clang__) || defined(__GNUC__)
 #define ISIGN(V)                    ({ __typeof__(V) __v = (V); ((__v > 0) - (__v < 0)); })
-#define IABS(V)                     ({ __typeof__(V) __v = (V); (__v < 0 ? -__v : __v); })
-#else
-#error review this implementation for the compiler in use
-#endif
 
-#define ELT_PTR_OFS(ctx, base, inx) ELT_PTR_((base), (inx), ELT_SZ(ctx))
+#define ELT_PTR_FWD(ctx, base, inx) ELT_PTR_FWD_((base), (inx), ELT_SZ(ctx))
+#define ELT_PTR_BCK(ctx, base, inx) ELT_PTR_BCK_((base), (inx), ELT_SZ(ctx))
 #define ELT_PTR_NEXT(ctx, base)     (((void *)(base)) + ELT_SZ(ctx))
 #define ELT_PTR_PREV(ctx, base)     (((void *)(base)) - ELT_SZ(ctx))
 #define ELT_DIST(ctx, a, b)         ELT_DIST_((a), (b), ELT_SZ(ctx))
@@ -666,7 +693,8 @@ static inline void _aux_free(aux_t * aux)
 #define SORT_SUFFIX                 4
 
 #define ELT_OF_SZ(n, sz)            ((n) << 2)
-#define ELT_PTR_(base, inx, sz)     ({ __typeof__(inx) __inx = (inx); ((void *)(base)) + ISIGN(__inx) * (IABS(__inx) << 2); })
+#define ELT_PTR_FWD_(base, inx, sz) ({ __typeof__(inx) __inx = (inx); ((void *)(base)) + (__inx << 2); })
+#define ELT_PTR_BCK_(base, inx, sz) ({ __typeof__(inx) __inx = (inx); ((void *)(base)) - (__inx << 2); })
 #define ELT_DIST_(a, b, sz)         ((((void *)(a)) - ((void *)(b))) >> 2)
 
 #define ELT_TYPE                    uint32_t
@@ -676,7 +704,8 @@ static inline void _aux_free(aux_t * aux)
 
 #undef ELT_TYPE
 #undef ELT_DIST_
-#undef ELT_PTR_
+#undef ELT_PTR_FWD_
+#undef ELT_PTR_BCK_
 #undef ELT_OF_SZ
 
 #undef SORT_SUFFIX
@@ -690,7 +719,8 @@ static inline void _aux_free(aux_t * aux)
 #define SORT_SUFFIX                 8
 
 #define ELT_OF_SZ(n, sz)            ((n) << 3)
-#define ELT_PTR_(base, inx, sz)     ({ __typeof__(inx) __inx = (inx); ((void *)(base)) + ISIGN(__inx) * (IABS(__inx) << 3); })
+#define ELT_PTR_FWD_(base, inx, sz) ({ __typeof__(inx) __inx = (inx); ((void *)(base)) + (__inx << 3); })
+#define ELT_PTR_BCK_(base, inx, sz) ({ __typeof__(inx) __inx = (inx); ((void *)(base)) - (__inx << 3); })
 #define ELT_DIST_(a, b, sz)         ((((void *)(a)) - ((void *)(b))) >> 3)
 
 #if __LP64__
@@ -704,7 +734,8 @@ static inline void _aux_free(aux_t * aux)
 
 #undef ELT_TYPE
 #undef ELT_DIST_
-#undef ELT_PTR_
+#undef ELT_PTR_FWD_
+#undef ELT_PTR_BCK_
 #undef ELT_OF_SZ
 
 #undef SORT_SUFFIX
@@ -718,14 +749,16 @@ static inline void _aux_free(aux_t * aux)
 #define SORT_SUFFIX                 16
 
 #define ELT_OF_SZ(n, sz)            ((n) << 4)
-#define ELT_PTR_(base, inx, sz)     ({ __typeof__(inx) __inx = (inx); ((void *)(base)) + ISIGN(__inx) * (IABS(__inx) << 4); })
+#define ELT_PTR_FWD_(base, inx, sz) ({ __typeof__(inx) __inx = (inx); ((void *)(base)) + (__inx << 4); })
+#define ELT_PTR_BCK_(base, inx, sz) ({ __typeof__(inx) __inx = (inx); ((void *)(base)) - (__inx << 4); })
 #define ELT_DIST_(a, b, sz)         ((((void *)(a)) - ((void *)(b))) >> 4)
 
 #include "pmergesort-mem-sz.inl"
 #include "pmergesort-mem.inl"
 
 #undef ELT_DIST_
-#undef ELT_PTR_
+#undef ELT_PTR_FWD_
+#undef ELT_PTR_BCK_
 #undef ELT_OF_SZ
 
 #undef SORT_SUFFIX
@@ -737,14 +770,16 @@ static inline void _aux_free(aux_t * aux)
 #define SORT_SUFFIX                 sz
 
 #define ELT_OF_SZ(n, sz)            ((sz) * (n))
-#define ELT_PTR_(base, inx, sz)     (((void *)(base)) + (sz) * (inx))
+#define ELT_PTR_FWD_(base, inx, sz) (((void *)(base)) + (sz) * (inx))
+#define ELT_PTR_BCK_(base, inx, sz) (((void *)(base)) - (sz) * (inx))
 #define ELT_DIST_(a, b, sz)         ((((void *)(a)) - ((void *)(b))) / (sz))
 
 #include "pmergesort-mem-sz.inl"
 #include "pmergesort-mem.inl"
 
 #undef ELT_DIST_
-#undef ELT_PTR_
+#undef ELT_PTR_FWD_
+#undef ELT_PTR_BCK_
 #undef ELT_OF_SZ
 
 #undef SORT_SUFFIX
