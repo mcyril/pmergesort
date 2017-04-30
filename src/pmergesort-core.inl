@@ -255,6 +255,56 @@ static inline void _(inplace_merge)(void * lo, void * mi, void * hi, context_t *
 }
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------------------------------------------------------- */
+
+#if CFG_PARALLEL && _CFG_PARALLEL_MAY_SPAWN
+/* -------------------------------------------------------------------------------------------------------------------------- */
+/*  unified core of parallel symmerge                                                                                        */
+/* -------------------------------------------------------------------------------------------------------------------------- */
+static
+#if CFG_PARALLEL_USE_PTHREADS
+inline
+#endif
+void _(merge_spawn_pass)(void * arg)
+{
+    pmergesort_pass_context_t * pass_ctx = arg;
+    aux_t * aux = &pass_ctx->auxes[0];
+
+    if (aux->rc == 0)
+    {
+#if CFG_PARALLEL_USE_GCD
+        dispatch_semaphore_wait(pass_ctx->ctx->thpool->mutex, DISPATCH_TIME_FOREVER); /* semaphore to prevent the threads overcommit flood */
+#endif
+
+        aux_t laux;
+        laux.rc = 0;
+        laux.parent = aux;
+        laux.sz = 0;
+        laux.temp = NULL;
+
+        pass_ctx->effector(pass_ctx->lo, pass_ctx->mi, pass_ctx->hi, pass_ctx->ctx, &laux);
+        if (laux.rc != 0)
+            aux->rc = laux.rc; /* FIXME: atomic */
+
+        _aux_free(&laux);
+
+#if CFG_PARALLEL_USE_GCD
+        dispatch_semaphore_signal(pass_ctx->ctx->thpool->mutex); /* report processed */
+#endif
+    }
+
+    free(arg); /* clean self */
+}
+
+#if CFG_PARALLEL_USE_PTHREADS
+static void * _(merge_spawn_pass_ex)(void * arg)
+{
+    _(merge_spawn_pass)(arg);
+
+    return NULL;
+}
+#endif
+#endif /* CFG_PARALLEL && _CFG_PARALLEL_MAY_SPAWN */
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 /*  inplace merge two sorted segments of the vary sizes and keep resulting segment sorted                                     */
@@ -266,7 +316,7 @@ static inline void _(inplace_merge)(void * lo, void * mi, void * hi, context_t *
 /*  Radzik, editors, Algorithms - ESA 2004, volume 3221 of Lecture Notes in                                                   */
 /*  Computer Science, pages 714-723. Springer, 2004.                                                                          */
 /* -------------------------------------------------------------------------------------------------------------------------- */
-static void _(inplace_symmerge)(void * lo, void * mi, void * hi, context_t * ctx, __unused aux_t * aux)
+static void _(inplace_symmerge)(void * lo, void * mi, void * hi, context_t * ctx, aux_t * aux)
 {
     size_t sz = ELT_SZ(ctx);
 
@@ -329,7 +379,30 @@ static void _(inplace_symmerge)(void * lo, void * mi, void * hi, context_t * ctx
         /* merge the 1st subsegments [lo, start) & [start, mid) recurrently
             (obviously it's the same size or shorter by 1 than the 2nd one) */
 
-        _(inplace_symmerge)(lo, start, mid, ctx, NULL);
+#if CFG_PARALLEL && _CFG_PARALLEL_MAY_SPAWN
+        if (ctx->thpool != NULL && len > ctx->cut_off)
+        {
+            pmergesort_pass_context_t * pass_ctx = malloc(sizeof(pmergesort_pass_context_t));
+            pass_ctx->ctx = ctx;
+            pass_ctx->bsz = 0;
+            pass_ctx->dbl_bsz = 0;
+            pass_ctx->chunksz = 0;
+            pass_ctx->numchunks = 0;
+            pass_ctx->lo = lo;
+            pass_ctx->mi = start;
+            pass_ctx->hi = mid;
+            pass_ctx->effector = ctx->merge_effector;
+            pass_ctx->auxes = aux->parent;
+
+#if CFG_PARALLEL_USE_PTHREADS
+            thr_pool_queue(ctx->thpool, _(merge_spawn_pass_ex), pass_ctx);
+#elif CFG_PARALLEL_USE_GCD
+            dispatch_group_async_f(ctx->thpool->group, ctx->thpool->queue, pass_ctx, _(merge_spawn_pass));
+#endif
+        }
+        else
+#endif
+            _(inplace_symmerge)(lo, start, mid, ctx, NULL);
 
         /* merge the 2nd subsegments [mid, end) & [end, hi) here instead of
             recurrent call of _(inplace_symmerge)(mid, end, hi, ctx, NULL) */
@@ -419,7 +492,31 @@ static __attribute__((unused)) void _(aux_symmerge)(void * lo, void * mi, void *
         /* merge the 1st subsegments [lo, start) & [start, mid) recurrently
             (obviously it's the same size or shorter by 1 than the 2nd one) */
 
-        _(aux_symmerge)(lo, start, mid, ctx, aux);
+#if CFG_PARALLEL && _CFG_PARALLEL_MAY_SPAWN
+        if (ctx->thpool != NULL && len > ctx->cut_off)
+        {
+            pmergesort_pass_context_t * pass_ctx = malloc(sizeof(pmergesort_pass_context_t));
+            pass_ctx->ctx = ctx;
+            pass_ctx->bsz = 0;
+            pass_ctx->dbl_bsz = 0;
+            pass_ctx->chunksz = 0;
+            pass_ctx->numchunks = 0;
+            pass_ctx->lo = lo;
+            pass_ctx->mi = start;
+            pass_ctx->hi = mid;
+            pass_ctx->effector = ctx->merge_effector;
+            pass_ctx->auxes = aux->parent;
+
+#if CFG_PARALLEL_USE_PTHREADS
+            thr_pool_queue(ctx->thpool, _(merge_spawn_pass_ex), pass_ctx);
+#elif CFG_PARALLEL_USE_GCD
+            dispatch_group_async_f(ctx->thpool->group, ctx->thpool->queue, pass_ctx, _(merge_spawn_pass));
+#endif
+        }
+        else
+#endif
+            _(aux_symmerge)(lo, start, mid, ctx, aux);
+
         if (aux->rc != 0)
             break; /* bail out */
 
@@ -794,13 +891,13 @@ void _(sort_chunk_pass)(void * arg, size_t chunk)
     {
         pass_ctx->effector(a, a, b, pass_ctx->ctx, aux);
         if (aux->rc != 0)
-            return;
+            break;
 
         a = b;
         b = ELT_PTR_FWD(pass_ctx->ctx, b, pass_ctx->bsz);
     }
 
-    if (last != 0)
+    if (last != 0 && aux->rc == 0)
         pass_ctx->effector(a, a, c, pass_ctx->ctx, aux);
 }
 
@@ -811,6 +908,11 @@ inline
 void _(merge_chunks_pass)(void * arg, size_t chunk)
 {
     pmergesort_pass_context_t * pass_ctx = arg;
+
+#if CFG_PARALLEL_USE_GCD && _CFG_PARALLEL_MAY_SPAWN
+    dispatch_semaphore_wait(pass_ctx->ctx->thpool->mutex, DISPATCH_TIME_FOREVER); /* semaphore to prevent the threads overcommit flood */
+#endif
+
     aux_t * aux = &pass_ctx->auxes[chunk];
 
     int last = (chunk < pass_ctx->numchunks - 1) ? 0 : 1;
@@ -823,14 +925,18 @@ void _(merge_chunks_pass)(void * arg, size_t chunk)
     {
         pass_ctx->effector(a, ELT_PTR_FWD(pass_ctx->ctx, a, pass_ctx->bsz), b, pass_ctx->ctx, aux);
         if (aux->rc != 0)
-            return;
+            break;
 
         a = b;
         b = ELT_PTR_FWD(pass_ctx->ctx, b, pass_ctx->dbl_bsz);
     }
 
-    if (last != 0)
+    if (last != 0 && aux->rc == 0)
         pass_ctx->effector(a, ELT_PTR_FWD(pass_ctx->ctx, a, pass_ctx->bsz), c, pass_ctx->ctx, aux);
+
+#if CFG_PARALLEL_USE_GCD && _CFG_PARALLEL_MAY_SPAWN
+        dispatch_semaphore_signal(pass_ctx->ctx->thpool->mutex); /* report processed */
+#endif
 }
 
 #if CFG_PARALLEL_USE_PTHREADS
@@ -854,7 +960,8 @@ static void * _(merge_chunks_pass_ex)(void * arg)
 static inline int _(pmergesort_impl)(context_t * ctx)
 {
     aux_t auxes[ctx->ncpu];
-    memset(auxes, 0, sizeof(auxes));
+    for (int i = 0; i < ctx->ncpu; i++)
+        auxes[i] = (aux_t){ .parent = &auxes[i] };
 
     void * lo = (void *)ctx->base;
     void * hi = ELT_PTR_FWD(ctx, lo, ctx->n);
@@ -874,6 +981,7 @@ static inline int _(pmergesort_impl)(context_t * ctx)
         pass1_ctx_base.chunksz = chunksz;
         pass1_ctx_base.numchunks = numchunks;
         pass1_ctx_base.lo = lo;
+        pass1_ctx_base.mi = NULL;
         pass1_ctx_base.hi = hi;
         pass1_ctx_base.effector = ctx->sort_effector;
         pass1_ctx_base.auxes = auxes;
@@ -911,6 +1019,7 @@ static inline int _(pmergesort_impl)(context_t * ctx)
     pmergesort_pass_context_t pass2_ctx_base;
     pass2_ctx_base.ctx = ctx;
     pass2_ctx_base.lo = lo;
+    pass2_ctx_base.mi = NULL;
     pass2_ctx_base.hi = hi;
     pass2_ctx_base.effector = ctx->merge_effector;
     pass2_ctx_base.auxes = auxes;
@@ -956,6 +1065,10 @@ static inline int _(pmergesort_impl)(context_t * ctx)
         {
             pass2_ctx_base.chunk = 0;
             _(merge_chunks_pass_ex)(&pass2_ctx_base);
+
+#if _CFG_PARALLEL_MAY_SPAWN
+            thr_pool_wait(ctx->thpool);
+#endif
         }
 
         bsz = dbl_bsz;
@@ -982,8 +1095,18 @@ static inline int _(pmergesort_impl)(context_t * ctx)
 {
     dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, _CFG_DISPATCH_QUEUE_FLAGS);
 
+    thr_pool_t pool;
+    pool.queue = queue;
+#if _CFG_PARALLEL_MAY_SPAWN
+    pool.group = NULL;
+    pool.mutex = NULL;
+#endif
+
+    ctx->thpool = &pool;
+
     aux_t auxes[ctx->ncpu];
-    memset(auxes, 0, sizeof(auxes));
+    for (int i = 0; i < ctx->ncpu; i++)
+        auxes[i] = (aux_t){ .parent = &auxes[i] };
 
     void * lo = (void *)ctx->base;
     void * hi = ELT_PTR_FWD(ctx, lo, ctx->n);
@@ -1003,6 +1126,7 @@ static inline int _(pmergesort_impl)(context_t * ctx)
         pass1_ctx.chunksz = chunksz;
         pass1_ctx.numchunks = numchunks;
         pass1_ctx.lo = lo;
+        pass1_ctx.mi = NULL;
         pass1_ctx.hi = hi;
         pass1_ctx.effector = ctx->sort_effector;
         pass1_ctx.auxes = auxes;
@@ -1025,11 +1149,17 @@ static inline int _(pmergesort_impl)(context_t * ctx)
         }
     }
 
+#if _CFG_PARALLEL_MAY_SPAWN
+    pool.group = dispatch_group_create();
+    pool.mutex = dispatch_semaphore_create(ctx->ncpu);
+#endif
+
     /* pass 2 */
     {
         pmergesort_pass_context_t pass2_ctx;
         pass2_ctx.ctx = ctx;
         pass2_ctx.lo = lo;
+        pass2_ctx.mi = NULL;
         pass2_ctx.hi = hi;
         pass2_ctx.effector = ctx->merge_effector;
         pass2_ctx.auxes = auxes;
@@ -1055,6 +1185,10 @@ static inline int _(pmergesort_impl)(context_t * ctx)
 
                 dispatch_apply_f(numchunks, queue, &pass2_ctx, _(merge_chunks_pass));
 
+#if _CFG_PARALLEL_MAY_SPAWN
+                dispatch_group_wait(pool.group, DISPATCH_TIME_FOREVER);
+#endif
+
                 for (int i = 0; i < ctx->ncpu; i++)
                 {
                     if (auxes[i].rc != 0)
@@ -1062,13 +1196,25 @@ static inline int _(pmergesort_impl)(context_t * ctx)
                 }
             }
             else
+            {
                 _(merge_chunks_pass)(&pass2_ctx, 0);
+#if _CFG_PARALLEL_MAY_SPAWN
+                dispatch_group_wait(pool.group, DISPATCH_TIME_FOREVER);
+#endif
+            }
 
             bsz = dbl_bsz;
         }
     }
 
 bail_out:;
+
+#if _CFG_PARALLEL_MAY_SPAWN
+    if (pool.group != NULL)
+        dispatch_release(pool.group);
+    if (pool.mutex != NULL)
+        dispatch_release(pool.mutex);
+#endif
 
     int rc = 0;
     for (int i = 0; i < ctx->ncpu; i++)
@@ -1112,6 +1258,10 @@ static inline void _(symmergesort)(context_t * ctx)
             return;
         }
     }
+#endif
+
+#if CFG_PARALLEL && _CFG_PARALLEL_MAY_SPAWN
+    ctx->thpool = NULL; /* disable threads spawn */
 #endif
 
     void * lo = (void *)ctx->base;
@@ -1181,6 +1331,10 @@ static inline int _(pmergesort)(context_t * ctx)
     }
 #endif
 
+#if CFG_PARALLEL && _CFG_PARALLEL_MAY_SPAWN
+    ctx->thpool = NULL; /* disable threads spawn */
+#endif
+
     void * lo = (void *)ctx->base;
     void * hi = ELT_PTR_FWD(ctx, lo, ctx->n);
 
@@ -1240,7 +1394,7 @@ bail_out:;
 
 static __attribute__((unused)) void _(wrap_sort)(void * lo, __unused void * mi, void * hi, context_t * ctx, aux_t * aux)
 {
-    aux->rc = CALL_SORT(ctx, lo, ELT_DIST(ctx, hi, lo));
+    aux->rc = CALL_SORT(ctx, lo, ELT_DIST(ctx, hi, lo)); /* FIXME: atomic */
 }
 
 static inline int _(wrapmergesort)(context_t * ctx)

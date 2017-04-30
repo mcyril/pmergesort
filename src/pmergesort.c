@@ -91,6 +91,8 @@
                                             see Apple Co. CoreFoundation source */
 #endif
 
+#define _CFG_PARALLEL_MAY_SPAWN     1   /* EXPERIMENTAL: allow symmerge to spawn nested threads, TODO: more adaptive */
+
 #define _CFG_PRESORT                binsort_run     /* method of pre-sort for initial subsegments,
                                                         allowed: binsort, binsort_run, and binsort_mergerun */
 
@@ -111,10 +113,12 @@
 #define _CFG_BLOCKLEN_MERGE         32
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------------------------------------------------------- */
 
 typedef struct thr_pool thr_pool_t;
 
 #if CFG_PARALLEL
+
 #ifdef __APPLE__
 #include <sys/sysctl.h>
 #elif __hpux
@@ -145,6 +149,37 @@ void pmergesort_nCPU(int32_t ncpu)
 #elif CFG_PARALLEL_USE_GCD
 #define _CFG_ONCE_ARG   void * ctx
 #endif
+
+/*
+ * psort.c qotd:
+ *
+ * The turnoff value is the size of a partition that,
+ * below which, we stop doing in parallel, and just do
+ * in the current thread.  The value of sqrt(n) was
+ * determined heuristically.  There is a smaller
+ * dependence on the slowness of the comparison
+ * function, and there might be a dependence on the
+ * number of processors, but the algorithm has not been
+ * determined.  Because the sensitivity to the turnoff
+ * value is relatively low, we use a fast, approximate
+ * integer square root routine that is good enough for
+ * this purpose.
+ *
+ * CM: actually it depends on thread pool architecture as well
+ *
+ */
+static __attribute__((noinline)) size_t cutOff(size_t n)
+{
+    size_t s = 1L << (flsl(n) >> 1);
+    s = (s + n / s) >> 1;
+    s = (s + n / s) >> 1;
+
+#if CFG_PARALLEL_USE_PTHREADS
+    return s << 4;
+#elif CFG_PARALLEL_USE_GCD
+    return s << 2;
+#endif
+}
 
 static void __numCPU_initialize(_CFG_ONCE_ARG)
 {
@@ -207,15 +242,7 @@ static __attribute__((noinline)) void __thPoolKey_initialize()
     pthread_key_create(&_sKey, __thPool_finalize);
 }
 
-#if 0
-static __attribute__((destructor)) void __thPoolKey_finalize()
-{
-    if (_sKey != 0)
-        pthread_key_delete(_sKey);
-}
-#endif
-
-static thr_pool_t * thPool()
+static __attribute__((noinline)) thr_pool_t * thPool()
 {
 static pthread_once_t _once = PTHREAD_ONCE_INIT;
 
@@ -243,6 +270,15 @@ static pthread_once_t _once = PTHREAD_ONCE_INIT;
 /* -------------------------------------------------------------------------------------------------------------------------- */
 #include <dispatch/dispatch.h>
 /* -------------------------------------------------------------------------------------------------------------------------- */
+
+struct thr_pool
+{
+    dispatch_queue_t        queue;
+#if _CFG_PARALLEL_MAY_SPAWN
+    dispatch_group_t        group;
+    dispatch_semaphore_t    mutex; /* semaphore to prevent the threads overcommit flood */
+#endif
+};
 
 #if _CFG_QUEUE_OVERCOMMIT
 /*!
@@ -278,10 +314,22 @@ static dispatch_once_t _once;
 /* -------------------------------------------------------------------------------------------------------------------------- */
 #endif /* CFG_PARALLEL_USE_PTHREADS */
 /* -------------------------------------------------------------------------------------------------------------------------- */
-#else
+
+#else /* CFG_PARALLEL */
+
+#if CFG_CORE_PROFILE
+void pmergesort_nCPU(int32_t ncpu)
+{
+    /* stub */
+}
+#endif
+
+/* -------------------------------------------------------------------------------------------------------------------------- */
 #define numCPU()    (0)
 #define thPool()    ((thr_pool_t *)0)
+#define cutOff(n)   (0)
 /* -------------------------------------------------------------------------------------------------------------------------- */
+
 #endif /* CFG_PARALLEL */
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
@@ -295,7 +343,8 @@ typedef int (*sort_r_t)(void * base, size_t n, size_t sz, void * thunk, cmpr_t c
 struct _context;
 struct _aux
 {
-    int             rc;         /* result code of effector operation */
+    int             rc;         /* result code of effector operation */ /* FIXME: atomic */
+    struct _aux *   parent;     /* parent aux (initial one) for spawned threads, or 'self' for top */
 
     size_t          sz;         /* size of temp. buffer */
     void *          temp;       /* temp. buffer storage */
@@ -326,6 +375,7 @@ struct _context
 
     size_t          npercpu;        /* number of elements per CPU       */
     size_t          bsize;          /* initial block size               */
+    size_t          cut_off;        /* min. len of subsegment to spawn  */
     effector_t      sort_effector;  /* effector to pre-sort blocks      */
     effector_t      merge_effector; /* effector to merge blocks         */
 
@@ -350,6 +400,7 @@ struct _pmergesort_pass_context
 #endif
 
     void *          lo;
+    void *          mi;
     void *          hi;
 
     aux_t *         auxes;      /* array of per-thread aux data         */
@@ -646,7 +697,7 @@ static inline void * _aux_alloc(aux_t * aux, size_t sz)
         tmp = realloc(tmp, sz);
         if (tmp == NULL)
         {
-            aux->rc = 1;
+            aux->rc = 1; /* FIXME: atomic */
         }
         else
         {
@@ -801,7 +852,7 @@ void symmergesort(void * base, size_t n, size_t sz, int (*cmp)(const void *, con
     if (n < 2) /* have nothing to sort */
         return;
 
-    context_t ctx = { base, n, sz, cmp, NULL, numCPU(), thPool(), 0, 0, NULL, NULL, NULL };
+    context_t ctx = { base, n, sz, cmp, NULL, numCPU(), thPool(), 0, 0, cutOff(n), NULL, NULL, NULL };
 
     _F(symmergesort)(&ctx);
 }
@@ -811,7 +862,7 @@ int pmergesort(void * base, size_t n, size_t sz, int (*cmp)(const void *, const 
     if (n < 2) /* have nothing to sort */
         return 0;
 
-    context_t ctx = { base, n, sz, cmp, NULL, numCPU(), thPool(), 0, 0, NULL, NULL, NULL };
+    context_t ctx = { base, n, sz, cmp, NULL, numCPU(), thPool(), 0, 0, cutOff(n), NULL, NULL, NULL };
 
     return _F(pmergesort)(&ctx);
 }
@@ -821,7 +872,7 @@ int wrapmergesort(void * base, size_t n, size_t sz, int (*cmp)(const void *, con
     if (n < 2) /* have nothing to sort */
         return 0;
 
-    context_t ctx = { base, n, sz, cmp, NULL, numCPU(), thPool(), 0, 0, NULL, NULL, sort };
+    context_t ctx = { base, n, sz, cmp, NULL, numCPU(), thPool(), 0, 0, cutOff(n), NULL, NULL, sort };
 
     return _F(wrapmergesort)(&ctx);
 }
@@ -832,7 +883,7 @@ void insertionsort(void * base, size_t n, size_t sz, int (*cmp)(const void *, co
     if (n < 2) /* have nothing to sort */
         return;
 
-    context_t ctx = { base, n, sz, cmp, NULL, 0, NULL, 0, 0, NULL, NULL, NULL };
+    context_t ctx = { base, n, sz, cmp, NULL, 0, NULL, 0, 0, 0, NULL, NULL, NULL };
 
     _F(insertionsort)(&ctx);
 }
@@ -844,7 +895,7 @@ void insertionsort_run(void * base, size_t n, size_t sz, int (*cmp)(const void *
     if (n < 2) /* have nothing to sort */
         return;
 
-    context_t ctx = { base, n, sz, cmp, NULL, 0, NULL, 0, 0, NULL, NULL, NULL };
+    context_t ctx = { base, n, sz, cmp, NULL, 0, NULL, 0, 0, 0, NULL, NULL, NULL };
 
     _F(insertionsort_run)(&ctx);
 }
@@ -856,7 +907,7 @@ void insertionsort_mergerun(void * base, size_t n, size_t sz, int (*cmp)(const v
     if (n < 2) /* have nothing to sort */
         return;
 
-    context_t ctx = { base, n, sz, cmp, NULL, 0, NULL, 0, 0, NULL, NULL, NULL };
+    context_t ctx = { base, n, sz, cmp, NULL, 0, NULL, 0, 0, 0, NULL, NULL, NULL };
 
     _F(insertionsort_mergerun)(&ctx);
 }
@@ -884,7 +935,7 @@ void symmergesort_r(void * base, size_t n, size_t sz, void * thunk, int (*cmp)(v
     if (n < 2) /* have nothing to sort */
         return;
 
-    context_t ctx = { base, n, sz, cmp, thunk, numCPU(), thPool(), 0, 0, NULL, NULL, NULL };
+    context_t ctx = { base, n, sz, cmp, thunk, numCPU(), thPool(), 0, 0, cutOff(n), NULL, NULL, NULL };
 
     _F(symmergesort)(&ctx);
 }
@@ -894,7 +945,7 @@ int pmergesort_r(void * base, size_t n, size_t sz, void * thunk, int (*cmp)(void
     if (n < 2) /* have nothing to sort */
         return 0;
 
-    context_t ctx = { base, n, sz, cmp, thunk, numCPU(), thPool(), 0, 0, NULL, NULL, NULL };
+    context_t ctx = { base, n, sz, cmp, thunk, numCPU(), thPool(), 0, 0, cutOff(n), NULL, NULL, NULL };
 
     return _F(pmergesort)(&ctx);
 }
@@ -904,7 +955,7 @@ int wrapmergesort_r(void * base, size_t n, size_t sz, void * thunk, int (*cmp)(v
     if (n < 2) /* have nothing to sort */
         return 0;
 
-    context_t ctx = { base, n, sz, cmp, thunk, numCPU(), thPool(), 0, 0, NULL, NULL, sort_r };
+    context_t ctx = { base, n, sz, cmp, thunk, numCPU(), thPool(), 0, 0, cutOff(n), NULL, NULL, sort_r };
 
     return _F(wrapmergesort)(&ctx);
 }
