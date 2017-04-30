@@ -402,10 +402,10 @@ static void _(inplace_symmerge)(void * lo, void * mi, void * hi, context_t * ctx
         }
         else
 #endif
-            _(inplace_symmerge)(lo, start, mid, ctx, NULL);
+            _(inplace_symmerge)(lo, start, mid, ctx, aux);
 
         /* merge the 2nd subsegments [mid, end) & [end, hi) here instead of
-            recurrent call of _(inplace_symmerge)(mid, end, hi, ctx, NULL) */
+            recurrent call of _(inplace_symmerge)(mid, end, hi, ctx, aux) */
 
         lo = mid;
         mi = end;
@@ -521,7 +521,7 @@ static __attribute__((unused)) void _(aux_symmerge)(void * lo, void * mi, void *
             break; /* bail out */
 
         /* merge the 2nd subsegments [mid, end) & [end, hi) here instead of
-            recurrent call of _(aux_symmerge)(mid, end, hi, ctx, NULL) */
+            recurrent call of _(aux_symmerge)(mid, end, hi, ctx, aux) */
 
         lo = mid;
         mi = end;
@@ -1238,11 +1238,21 @@ bail_out:;
 
 static inline void _(symmergesort)(context_t * ctx)
 {
+    if (ctx->n < _CFG_BLOCKLEN_MTHRESHOLD * _CFG_BLOCKLEN_SYMMERGE)
+    {
+        void * lo = (void *)ctx->base;
+        void * hi = ELT_PTR_FWD(ctx, lo, ctx->n);
+
+        _(_CFG_PRESORT)(lo, lo, hi, ctx, NULL);
+
+        return;
+    }
+
 #if CFG_PARALLEL
     for (int ncpu = ctx->ncpu; ncpu > 1; ncpu--)
     {
         size_t npercpu = IDIV_UP(ctx->n, ncpu);
-        if (npercpu > _CFG_BLOCKLEN_MTHRESHOLD * _CFG_BLOCKLEN_SYMMERGE)
+        if (npercpu >= _CFG_BLOCKLEN_MTHRESHOLD * _CFG_BLOCKLEN_SYMMERGE)
         {
             /* use parallel when have a long enough array could be distributed by cores */
 
@@ -1311,11 +1321,21 @@ static inline void _(symmergesort)(context_t * ctx)
 
 static inline int _(pmergesort)(context_t * ctx)
 {
+    if (ctx->n < _CFG_BLOCKLEN_MTHRESHOLD * _CFG_BLOCKLEN_SYMMERGE)
+    {
+        void * lo = (void *)ctx->base;
+        void * hi = ELT_PTR_FWD(ctx, lo, ctx->n);
+
+        _(_CFG_PRESORT)(lo, lo, hi, ctx, NULL);
+
+        return 0;
+    }
+
 #if CFG_PARALLEL
     for (int ncpu = ctx->ncpu; ncpu > 1; ncpu--)
     {
         size_t npercpu = IDIV_UP(ctx->n, ncpu);
-        if (npercpu > _CFG_BLOCKLEN_MTHRESHOLD * _CFG_BLOCKLEN_MERGE)
+        if (npercpu >= _CFG_BLOCKLEN_MTHRESHOLD * _CFG_BLOCKLEN_MERGE)
         {
             /* use parallel when have a long enough array could be distributed by cores */
 
@@ -1400,21 +1420,24 @@ static __attribute__((unused)) void _(wrap_sort)(void * lo, __unused void * mi, 
 static inline int _(wrapmergesort)(context_t * ctx)
 {
 #if CFG_PARALLEL
-    for (int ncpu = ctx->ncpu; ncpu > 1; ncpu--)
+    if (ctx->n >= 2 * _CFG_BLOCKLEN_MTHRESHOLD * _CFG_BLOCKLEN_SYMMERGE)
     {
-        size_t npercpu = IDIV_UP(ctx->n, ncpu);
-        if (npercpu > 2 * _CFG_BLOCKLEN_MTHRESHOLD * _CFG_BLOCKLEN_SYMMERGE)
+        for (int ncpu = ctx->ncpu; ncpu > 1; ncpu--)
         {
-            /* use parallel when have a long enough array could be distributed by cores */
+            size_t npercpu = IDIV_UP(ctx->n, ncpu);
+            if (npercpu >= 2 * _CFG_BLOCKLEN_MTHRESHOLD * _CFG_BLOCKLEN_SYMMERGE)
+            {
+                /* use parallel when have a long enough array could be distributed by cores */
 
-            /* pre-set initial pass values */
-            ctx->npercpu = npercpu;
-            ctx->bsize = npercpu;
-            ctx->sort_effector = _(wrap_sort);
-            ctx->merge_effector = _(aux_symmerge);
+                /* pre-set initial pass values */
+                ctx->npercpu = npercpu;
+                ctx->bsize = npercpu;
+                ctx->sort_effector = _(wrap_sort);
+                ctx->merge_effector = _(aux_symmerge);
 
-            /* run parallel sort */
-            return _(pmergesort_impl)(ctx);
+                /* run parallel sort */
+                return _(pmergesort_impl)(ctx);
+            }
         }
     }
 #endif

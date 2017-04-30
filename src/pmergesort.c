@@ -91,7 +91,7 @@
                                             see Apple Co. CoreFoundation source */
 #endif
 
-#define _CFG_PARALLEL_MAY_SPAWN     1   /* EXPERIMENTAL: allow symmerge to spawn nested threads, TODO: more adaptive */
+#define _CFG_PARALLEL_MAY_SPAWN     1   /* allow symmerge to spawn nested threads, TODO: more adaptive */
 
 #define _CFG_PRESORT                binsort_run     /* method of pre-sort for initial subsegments,
                                                         allowed: binsort, binsort_run, and binsort_mergerun */
