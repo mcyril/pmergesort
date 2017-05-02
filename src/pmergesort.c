@@ -100,6 +100,8 @@
 #define _CFG_USE_8_MEM              1 && CFG_RAW_ACCESS /* use dedicated int64 type memory ops */
 #define _CFG_USE_16_MEM             1 && CFG_RAW_ACCESS /* use dedicated int128 type memory ops */
 
+#define _CFG_RAW_ACCESS_ALIGNED     0   /* enable aligned raw memory access */
+
 #define _CFG_TMP_ROT                8   /* max. temp. elements at stack on rotate */
 
 #define _CFG_MIN_SUBMERGELEN        16  /* threshold to fallback from inplace symmerge to inplace merge */
@@ -419,73 +421,104 @@ typedef struct _pmergesort_pass_context pmergesort_pass_context_t;
 #include "asmlib.h"
 #endif
 
+#if __LP64__
+#define T_WORD  uint64_t
+#else
+#define T_WORD  uint32_t
+#endif
+
+#if _CFG_RAW_ACCESS_ALIGNED
+#define T_MASK  (sizeof(T_WORD) - 1)
+#endif
+
 static inline void _regions_swap(void * a, void * b, size_t sz)
 {
 #if CFG_RAW_ACCESS
 
-#if __LP64__
-    uint64_t * p64 = a;
-    uint64_t * q64 = b;
-    uint64_t t64;
-
-    while (sz >= sizeof(uint64_t))
-    {
-        t64 = *p64;
-        *p64++ = *q64;
-        *q64++ = t64;
-
-        sz -= sizeof(uint64_t);
-    }
-
-    uint8_t * p = (uint8_t *)p64;
-    uint8_t * q = (uint8_t *)q64;
-    uint8_t t;
-
-    switch (sz)
-    {
-    case 7: t = *p; *p++ = *q; *q++ = t; /* let's violate codestyle a bit */
-    case 6: t = *p; *p++ = *q; *q++ = t;
-    case 5: t = *p; *p++ = *q; *q++ = t;
-    case 4: t = *p; *p++ = *q; *q++ = t;
-    case 3: t = *p; *p++ = *q; *q++ = t;
-    case 2: t = *p; *p++ = *q; *q++ = t;
-    case 1: t = *p; *p++ = *q; *q++ = t;
-    case 0:
-        break;
-    default:
-        /* should never happen */
-        break;
-    }
-#else
-    uint32_t * p32 = a;
-    uint32_t * q32 = b;
-    uint32_t t32;
-
-    while (sz >= sizeof(uint32_t))
-    {
-        t32 = *p32;
-        *p32++ = *q32;
-        *q32++ = t32;
-
-        sz -= sizeof(uint32_t);
-    }
-
-    uint8_t * p = (uint8_t *)p32;
-    uint8_t * q = (uint8_t *)q32;
-    uint8_t t;
-
-    switch (sz)
-    {
-    case 3: t = *p; *p++ = *q; *q++ = t; /* let's violate codestyle a bit */
-    case 2: t = *p; *p++ = *q; *q++ = t;
-    case 1: t = *p; *p++ = *q; *q++ = t;
-    case 0:
-        break;
-    default:
-        /* should never happen */
-        break;
-    }
+#if _CFG_RAW_ACCESS_ALIGNED
+    size_t hsz = (uintptr_t)a & T_MASK;
+    if (hsz == ((uintptr_t)b & T_MASK))
 #endif
+    {
+        /* regions aligned */
+
+        /* head */
+
+        uint8_t * pbyte = (uint8_t *)a;
+        uint8_t * qbyte = (uint8_t *)b;
+        uint8_t tbyte;
+
+#if _CFG_RAW_ACCESS_ALIGNED
+        switch (hsz)
+        {
+#if __LP64__
+        case 7: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
+        case 6: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
+        case 5: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
+        case 4: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
+#endif
+        case 3: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
+        case 2: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
+        case 1: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte; sz -= hsz;
+        case 0:
+            break;
+        default:
+            /* should never happen */
+            break;
+        }
+#endif /* _CFG_RAW_ACCESS_ALIGNED */
+
+        /* words */
+
+        T_WORD * pword = (T_WORD *)pbyte;
+        T_WORD * qword = (T_WORD *)qbyte;
+        T_WORD tword;
+
+        while (sz >= sizeof(T_WORD))
+        {
+            tword = *pword; *pword++ = *qword; *qword++ = tword;
+            sz -= sizeof(T_WORD);
+        }
+
+        /* tail */
+
+        pbyte = (uint8_t *)pword;
+        qbyte = (uint8_t *)qword;
+
+        switch (sz)
+        {
+#if __LP64__
+        case 7: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
+        case 6: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
+        case 5: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
+        case 4: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
+#endif
+        case 3: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
+        case 2: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
+        case 1: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
+        case 0:
+            break;
+        default:
+            /* should never happen */
+            break;
+        }
+    }
+#if _CFG_RAW_ACCESS_ALIGNED
+    else
+    {
+        /* regions unaligned */ /* TODO: sliding window? */
+
+        uint8_t * pbyte = (uint8_t *)a;
+        uint8_t * qbyte = (uint8_t *)b;
+        uint8_t tbyte;
+
+        while (sz != 0)
+        {
+            tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
+            sz--;
+        }
+    }
+#endif /* _CFG_RAW_ACCESS_ALIGNED */
 
 #else
 
@@ -530,61 +563,89 @@ static inline void _region_copy(void * src, void * dst, size_t sz)
 {
 #if CFG_RAW_ACCESS
 
-#if __LP64__
-    uint64_t * p64 = src;
-    uint64_t * q64 = dst;
+    /* copy forward */
 
-    while (sz >= sizeof(uint64_t))
-    {
-        *q64++ = *p64++;
-
-        sz -= sizeof(uint64_t);
-    }
-
-    uint8_t * p = (uint8_t *)p64;
-    uint8_t * q = (uint8_t *)q64;
-
-    switch (sz)
-    {
-    case 7: *q++ = *p++;
-    case 6: *q++ = *p++;
-    case 5: *q++ = *p++;
-    case 4: *q++ = *p++;
-    case 3: *q++ = *p++;
-    case 2: *q++ = *p++;
-    case 1: *q++ = *p++;
-    case 0:
-        break;
-    default:
-        /* should never happen */
-        break;
-    }
-#else
-    uint32_t * p32 = src;
-    uint32_t * q32 = dst;
-
-    while (sz >= sizeof(uint32_t))
-    {
-        *q32++ = *p32++;
-
-        sz -= sizeof(uint32_t);
-    }
-
-    uint8_t * p = (uint8_t *)p32;
-    uint8_t * q = (uint8_t *)q32;
-
-    switch (sz)
-    {
-    case 3: *q++ = *p++;
-    case 2: *q++ = *p++;
-    case 1: *q++ = *p++;
-    case 0:
-        break;
-    default:
-        /* should never happen */
-        break;
-    }
+#if _CFG_RAW_ACCESS_ALIGNED
+    size_t hsz = (uintptr_t)src & T_MASK;
+    if (hsz == ((uintptr_t)dst & T_MASK))
 #endif
+    {
+        /* regions aligned */
+
+        /* head */
+
+        uint8_t * pbyte = (uint8_t *)src;
+        uint8_t * qbyte = (uint8_t *)dst;
+
+#if _CFG_RAW_ACCESS_ALIGNED
+        switch (hsz)
+        {
+#if __LP64__
+        case 7: *qbyte++ = *pbyte++;
+        case 6: *qbyte++ = *pbyte++;
+        case 5: *qbyte++ = *pbyte++;
+        case 4: *qbyte++ = *pbyte++;
+#endif
+        case 3: *qbyte++ = *pbyte++;
+        case 2: *qbyte++ = *pbyte++;
+        case 1: *qbyte++ = *pbyte++; sz -= hsz;
+        case 0:
+            break;
+        default:
+            /* should never happen */
+            break;
+        }
+#endif /* _CFG_RAW_ACCESS_ALIGNED */
+
+        /* words */
+
+        T_WORD * pword = (T_WORD *)pbyte;
+        T_WORD * qword = (T_WORD *)qbyte;
+
+        while (sz >= sizeof(T_WORD))
+        {
+            *qword++ = *pword++;
+            sz -= sizeof(T_WORD);
+        }
+
+        /* tail */
+
+        pbyte = (uint8_t *)pword;
+        qbyte = (uint8_t *)qword;
+
+        switch (sz)
+        {
+#if __LP64__
+        case 7: *qbyte++ = *pbyte++;
+        case 6: *qbyte++ = *pbyte++;
+        case 5: *qbyte++ = *pbyte++;
+        case 4: *qbyte++ = *pbyte++;
+#endif
+        case 3: *qbyte++ = *pbyte++;
+        case 2: *qbyte++ = *pbyte++;
+        case 1: *qbyte++ = *pbyte++;
+        case 0:
+            break;
+        default:
+            /* should never happen */
+            break;
+        }
+    }
+#if _CFG_RAW_ACCESS_ALIGNED
+    else
+    {
+        /* regions unaligned */ /* TODO: sliding window? */
+
+        uint8_t * pbyte = (uint8_t *)src;
+        uint8_t * qbyte = (uint8_t *)dst;
+
+        while (sz != 0)
+        {
+            *qbyte++ = *pbyte++;
+            sz--;
+        }
+    }
+#endif /* _CFG_RAW_ACCESS_ALIGNED */
 
 #else
 
@@ -601,61 +662,90 @@ static inline void _region_move_right(void * src, void * dst, size_t sz)
 {
 #if CFG_RAW_ACCESS
 
-#if __LP64__
-    uint64_t * p64 = (uint64_t *)((uint8_t *)src + sz);
-    uint64_t * q64 = (uint64_t *)((uint8_t *)dst + sz);
+    /* copy backward */
 
-    while (sz >= sizeof(uint64_t))
-    {
-        *--q64 = *--p64;
-
-        sz -= sizeof(uint64_t);
-    }
-
-    uint8_t * p = (uint8_t *)p64;
-    uint8_t * q = (uint8_t *)q64;
-
-    switch (sz)
-    {
-    case 7: *--q = *--p;
-    case 6: *--q = *--p;
-    case 5: *--q = *--p;
-    case 4: *--q = *--p;
-    case 3: *--q = *--p;
-    case 2: *--q = *--p;
-    case 1: *--q = *--p;
-    case 0:
-        break;
-    default:
-        /* should never happen */
-        break;
-    }
-#else
-    uint32_t * p32 = (uint32_t *)((uint8_t *)src + sz);
-    uint32_t * q32 = (uint32_t *)((uint8_t *)dst + sz);
-
-    while (sz >= sizeof(uint32_t))
-    {
-        *--q32 = *--p32;
-
-        sz -= sizeof(uint32_t);
-    }
-
-    uint8_t * p = (uint8_t *)p32;
-    uint8_t * q = (uint8_t *)q32;
-
-    switch (sz)
-    {
-    case 3: *--q = *--p;
-    case 2: *--q = *--p;
-    case 1: *--q = *--p;
-    case 0:
-        break;
-    default:
-        /* should never happen */
-        break;
-    }
+#if _CFG_RAW_ACCESS_ALIGNED
+    size_t hsz = (uintptr_t)src & T_MASK;
+    if (hsz == ((uintptr_t)dst & T_MASK))
 #endif
+    {
+        /* regions aligned */
+
+        /* tail */
+
+        uint8_t * pbyte = (uint8_t *)src + sz;
+        uint8_t * qbyte = (uint8_t *)dst + sz;
+
+#if _CFG_RAW_ACCESS_ALIGNED
+        size_t tsz = (sz - hsz) & T_MASK;
+        switch (tsz)
+        {
+#if __LP64__
+        case 7: *--qbyte = *--pbyte;
+        case 6: *--qbyte = *--pbyte;
+        case 5: *--qbyte = *--pbyte;
+        case 4: *--qbyte = *--pbyte;
+#endif
+        case 3: *--qbyte = *--pbyte;
+        case 2: *--qbyte = *--pbyte;
+        case 1: *--qbyte = *--pbyte; sz -= tsz;
+        case 0:
+            break;
+        default:
+            /* should never happen */
+            break;
+        }
+#endif /* _CFG_RAW_ACCESS_ALIGNED */
+
+        /* words */
+
+        T_WORD * pword = (T_WORD *)pbyte;
+        T_WORD * qword = (T_WORD *)qbyte;
+
+        while (sz >= sizeof(T_WORD))
+        {
+            *--qword = *--pword;
+            sz -= sizeof(T_WORD);
+        }
+
+        /* head */
+
+        pbyte = (uint8_t *)pword;
+        qbyte = (uint8_t *)qword;
+
+        switch (sz)
+        {
+#if __LP64__
+        case 7: *--qbyte = *--pbyte;
+        case 6: *--qbyte = *--pbyte;
+        case 5: *--qbyte = *--pbyte;
+        case 4: *--qbyte = *--pbyte;
+#endif
+        case 3: *--qbyte = *--pbyte;
+        case 2: *--qbyte = *--pbyte;
+        case 1: *--qbyte = *--pbyte;
+        case 0:
+            break;
+        default:
+            /* should never happen */
+            break;
+        }
+    }
+#if _CFG_RAW_ACCESS_ALIGNED
+    else
+    {
+        /* regions unaligned */ /* TODO: sliding window? */
+
+        uint8_t * pbyte = (uint8_t *)src + sz;
+        uint8_t * qbyte = (uint8_t *)dst + sz;
+
+        while (sz != 0)
+        {
+            *--qbyte = *--pbyte;
+            sz--;
+        }
+    }
+#endif /* _CFG_RAW_ACCESS_ALIGNED */
 
 #else
 
@@ -684,6 +774,12 @@ static inline void _region_move_left(void * src, void * dst, size_t sz)
 
 #endif
 }
+
+#if _CFG_RAW_ACCESS_ALIGNED
+#undef T_MASK
+#endif
+
+#undef T_WORD
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 /* allocate or adjust size of temporary storage if needed                                                                     */
