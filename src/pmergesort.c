@@ -110,6 +110,7 @@
 #define _CFG_MIN_SUBMERGELEN2       4   /* threshold to fallback from binary to linear search
                                             for short left/right segment merging */
 
+#define _CFG_BLOCKLEN_MTHRESHOLD0   16
 #define _CFG_BLOCKLEN_MTHRESHOLD    16
 #define _CFG_BLOCKLEN_SYMMERGE      32  /* 20 was as in built-in GO language function */
 #define _CFG_BLOCKLEN_MERGE         32
@@ -417,10 +418,16 @@ typedef struct _pmergesort_pass_context pmergesort_pass_context_t;
 /* memory accessors                                                                                                           */
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#if CFG_AGNER_ACCESS
+#if !CFG_RAW_ACCESS
+#if !CFG_AGNER_ACCESS
+#define T_MEMCPY(d,s,n)     memcpy((d),(s),(n))
+#define T_MEMMOVE(d,s,n)    memmove((d),(s),(n))
+#else
 #include "asmlib.h"
+#define T_MEMCPY(d,s,n)     A_memcpy((d),(s),(n))
+#define T_MEMMOVE(d,s,n)    A_memmove((d),(s),(n))
 #endif
-
+#else
 #if __LP64__
 #define T_WORD  uint64_t
 #else
@@ -431,35 +438,45 @@ typedef struct _pmergesort_pass_context pmergesort_pass_context_t;
 #define T_MASK  (sizeof(T_WORD) - 1)
 #endif
 
+union _ptr
+{
+    T_WORD *    word;
+    uint8_t *   byte;
+    uintptr_t   uint;
+};
+typedef union _ptr ptr_t;
+#endif /* !CFG_RAW_ACCESS */
+
 static inline void _regions_swap(void * a, void * b, size_t sz)
 {
 #if CFG_RAW_ACCESS
 
+    ptr_t p = { a };
+    ptr_t q = { b };
+
 #if _CFG_RAW_ACCESS_ALIGNED
-    size_t hsz = (uintptr_t)a & T_MASK;
-    if (hsz == ((uintptr_t)b & T_MASK))
+    size_t hsz = p.uint & T_MASK;
+    if (hsz == (q.uint & T_MASK))
 #endif
     {
         /* regions aligned */
 
         /* head */
 
-        uint8_t * pbyte = (uint8_t *)a;
-        uint8_t * qbyte = (uint8_t *)b;
         uint8_t tbyte;
 
 #if _CFG_RAW_ACCESS_ALIGNED
         switch (hsz)
         {
 #if __LP64__
-        case 7: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
-        case 6: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
-        case 5: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
-        case 4: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
+        case 7: tbyte = *p.byte; *p.byte++ = *q.byte; *q.byte++ = tbyte;
+        case 6: tbyte = *p.byte; *p.byte++ = *q.byte; *q.byte++ = tbyte;
+        case 5: tbyte = *p.byte; *p.byte++ = *q.byte; *q.byte++ = tbyte;
+        case 4: tbyte = *p.byte; *p.byte++ = *q.byte; *q.byte++ = tbyte;
 #endif
-        case 3: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
-        case 2: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
-        case 1: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte; sz -= hsz;
+        case 3: tbyte = *p.byte; *p.byte++ = *q.byte; *q.byte++ = tbyte;
+        case 2: tbyte = *p.byte; *p.byte++ = *q.byte; *q.byte++ = tbyte;
+        case 1: tbyte = *p.byte; *p.byte++ = *q.byte; *q.byte++ = tbyte; sz -= hsz;
         case 0:
             break;
         default:
@@ -470,32 +487,27 @@ static inline void _regions_swap(void * a, void * b, size_t sz)
 
         /* words */
 
-        T_WORD * pword = (T_WORD *)pbyte;
-        T_WORD * qword = (T_WORD *)qbyte;
         T_WORD tword;
 
         while (sz >= sizeof(T_WORD))
         {
-            tword = *pword; *pword++ = *qword; *qword++ = tword;
+            tword = *p.word; *p.word++ = *q.word; *q.word++ = tword;
             sz -= sizeof(T_WORD);
         }
 
         /* tail */
 
-        pbyte = (uint8_t *)pword;
-        qbyte = (uint8_t *)qword;
-
         switch (sz)
         {
 #if __LP64__
-        case 7: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
-        case 6: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
-        case 5: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
-        case 4: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
+        case 7: tbyte = *p.byte; *p.byte++ = *q.byte; *q.byte++ = tbyte;
+        case 6: tbyte = *p.byte; *p.byte++ = *q.byte; *q.byte++ = tbyte;
+        case 5: tbyte = *p.byte; *p.byte++ = *q.byte; *q.byte++ = tbyte;
+        case 4: tbyte = *p.byte; *p.byte++ = *q.byte; *q.byte++ = tbyte;
 #endif
-        case 3: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
-        case 2: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
-        case 1: tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
+        case 3: tbyte = *p.byte; *p.byte++ = *q.byte; *q.byte++ = tbyte;
+        case 2: tbyte = *p.byte; *p.byte++ = *q.byte; *q.byte++ = tbyte;
+        case 1: tbyte = *p.byte; *p.byte++ = *q.byte; *q.byte++ = tbyte;
         case 0:
             break;
         default:
@@ -506,15 +518,13 @@ static inline void _regions_swap(void * a, void * b, size_t sz)
 #if _CFG_RAW_ACCESS_ALIGNED
     else
     {
-        /* regions unaligned */ /* TODO: sliding window? */
+        /* regions unaligned */
 
-        uint8_t * pbyte = (uint8_t *)a;
-        uint8_t * qbyte = (uint8_t *)b;
         uint8_t tbyte;
 
         while (sz != 0)
         {
-            tbyte = *pbyte; *pbyte++ = *qbyte; *qbyte++ = tbyte;
+            tbyte = *p.byte; *p.byte++ = *q.byte; *q.byte++ = tbyte;
             sz--;
         }
     }
@@ -528,15 +538,9 @@ static inline void _regions_swap(void * a, void * b, size_t sz)
 
     while (sz >= sizeof(t))
     {
-#if CFG_AGNER_ACCESS
-        A_memcpy(t, p, sizeof(t));
-        A_memcpy(p, q, sizeof(t));
-        A_memcpy(q, t, sizeof(t));
-#else
-        memcpy(t, p, sizeof(t));
-        memcpy(p, q, sizeof(t));
-        memcpy(q, t, sizeof(t));
-#endif
+        T_MEMCPY(t, p, sizeof(t));
+        T_MEMCPY(p, q, sizeof(t));
+        T_MEMCPY(q, t, sizeof(t));
 
         p += sizeof(t);
         q += sizeof(t);
@@ -545,15 +549,9 @@ static inline void _regions_swap(void * a, void * b, size_t sz)
 
     if (sz > 0)
     {
-#if CFG_AGNER_ACCESS
-        A_memcpy(t, p, sz);
-        A_memcpy(p, q, sz);
-        A_memcpy(q, t, sz);
-#else
-        memcpy(t, p, sz);
-        memcpy(p, q, sz);
-        memcpy(q, t, sz);
-#endif
+        T_MEMCPY(t, p, sz);
+        T_MEMCPY(p, q, sz);
+        T_MEMCPY(q, t, sz);
     }
 
 #endif
@@ -563,32 +561,32 @@ static inline void _region_copy(void * src, void * dst, size_t sz)
 {
 #if CFG_RAW_ACCESS
 
+    ptr_t p = { src };
+    ptr_t q = { dst };
+
     /* copy forward */
 
 #if _CFG_RAW_ACCESS_ALIGNED
-    size_t hsz = (uintptr_t)src & T_MASK;
-    if (hsz == ((uintptr_t)dst & T_MASK))
+    size_t hsz = p.uint & T_MASK;
+    if (hsz == (q.uint & T_MASK))
 #endif
     {
         /* regions aligned */
 
         /* head */
 
-        uint8_t * pbyte = (uint8_t *)src;
-        uint8_t * qbyte = (uint8_t *)dst;
-
 #if _CFG_RAW_ACCESS_ALIGNED
         switch (hsz)
         {
 #if __LP64__
-        case 7: *qbyte++ = *pbyte++;
-        case 6: *qbyte++ = *pbyte++;
-        case 5: *qbyte++ = *pbyte++;
-        case 4: *qbyte++ = *pbyte++;
+        case 7: *q.byte++ = *p.byte++;
+        case 6: *q.byte++ = *p.byte++;
+        case 5: *q.byte++ = *p.byte++;
+        case 4: *q.byte++ = *p.byte++;
 #endif
-        case 3: *qbyte++ = *pbyte++;
-        case 2: *qbyte++ = *pbyte++;
-        case 1: *qbyte++ = *pbyte++; sz -= hsz;
+        case 3: *q.byte++ = *p.byte++;
+        case 2: *q.byte++ = *p.byte++;
+        case 1: *q.byte++ = *p.byte++; sz -= hsz;
         case 0:
             break;
         default:
@@ -599,31 +597,25 @@ static inline void _region_copy(void * src, void * dst, size_t sz)
 
         /* words */
 
-        T_WORD * pword = (T_WORD *)pbyte;
-        T_WORD * qword = (T_WORD *)qbyte;
-
         while (sz >= sizeof(T_WORD))
         {
-            *qword++ = *pword++;
+            *q.word++ = *p.word++;
             sz -= sizeof(T_WORD);
         }
 
         /* tail */
 
-        pbyte = (uint8_t *)pword;
-        qbyte = (uint8_t *)qword;
-
         switch (sz)
         {
 #if __LP64__
-        case 7: *qbyte++ = *pbyte++;
-        case 6: *qbyte++ = *pbyte++;
-        case 5: *qbyte++ = *pbyte++;
-        case 4: *qbyte++ = *pbyte++;
+        case 7: *q.byte++ = *p.byte++;
+        case 6: *q.byte++ = *p.byte++;
+        case 5: *q.byte++ = *p.byte++;
+        case 4: *q.byte++ = *p.byte++;
 #endif
-        case 3: *qbyte++ = *pbyte++;
-        case 2: *qbyte++ = *pbyte++;
-        case 1: *qbyte++ = *pbyte++;
+        case 3: *q.byte++ = *p.byte++;
+        case 2: *q.byte++ = *p.byte++;
+        case 1: *q.byte++ = *p.byte++;
         case 0:
             break;
         default:
@@ -634,14 +626,11 @@ static inline void _region_copy(void * src, void * dst, size_t sz)
 #if _CFG_RAW_ACCESS_ALIGNED
     else
     {
-        /* regions unaligned */ /* TODO: sliding window? */
-
-        uint8_t * pbyte = (uint8_t *)src;
-        uint8_t * qbyte = (uint8_t *)dst;
+        /* regions unaligned */
 
         while (sz != 0)
         {
-            *qbyte++ = *pbyte++;
+            *q.byte++ = *p.byte++;
             sz--;
         }
     }
@@ -649,11 +638,7 @@ static inline void _region_copy(void * src, void * dst, size_t sz)
 
 #else
 
-#if CFG_AGNER_ACCESS
-    A_memcpy(dst, src, sz);
-#else
-    memcpy(dst, src, sz);
-#endif
+    T_MEMCPY(dst, src, sz);
 
 #endif
 }
@@ -662,33 +647,36 @@ static inline void _region_move_right(void * src, void * dst, size_t sz)
 {
 #if CFG_RAW_ACCESS
 
+    ptr_t p = { src };
+    ptr_t q = { dst };
+
     /* copy backward */
 
 #if _CFG_RAW_ACCESS_ALIGNED
-    size_t hsz = (uintptr_t)src & T_MASK;
-    if (hsz == ((uintptr_t)dst & T_MASK))
+    size_t hsz = p.uint & T_MASK;
+    if (hsz == (q.uint & T_MASK))
 #endif
     {
         /* regions aligned */
 
         /* tail */
 
-        uint8_t * pbyte = (uint8_t *)src + sz;
-        uint8_t * qbyte = (uint8_t *)dst + sz;
+        p.uint += sz;
+        q.uint += sz;
 
 #if _CFG_RAW_ACCESS_ALIGNED
         size_t tsz = (sz - hsz) & T_MASK;
         switch (tsz)
         {
 #if __LP64__
-        case 7: *--qbyte = *--pbyte;
-        case 6: *--qbyte = *--pbyte;
-        case 5: *--qbyte = *--pbyte;
-        case 4: *--qbyte = *--pbyte;
+        case 7: *--q.byte = *--p.byte;
+        case 6: *--q.byte = *--p.byte;
+        case 5: *--q.byte = *--p.byte;
+        case 4: *--q.byte = *--p.byte;
 #endif
-        case 3: *--qbyte = *--pbyte;
-        case 2: *--qbyte = *--pbyte;
-        case 1: *--qbyte = *--pbyte; sz -= tsz;
+        case 3: *--q.byte = *--p.byte;
+        case 2: *--q.byte = *--p.byte;
+        case 1: *--q.byte = *--p.byte; sz -= tsz;
         case 0:
             break;
         default:
@@ -699,31 +687,25 @@ static inline void _region_move_right(void * src, void * dst, size_t sz)
 
         /* words */
 
-        T_WORD * pword = (T_WORD *)pbyte;
-        T_WORD * qword = (T_WORD *)qbyte;
-
         while (sz >= sizeof(T_WORD))
         {
-            *--qword = *--pword;
+            *--q.word = *--p.word;
             sz -= sizeof(T_WORD);
         }
 
         /* head */
 
-        pbyte = (uint8_t *)pword;
-        qbyte = (uint8_t *)qword;
-
         switch (sz)
         {
 #if __LP64__
-        case 7: *--qbyte = *--pbyte;
-        case 6: *--qbyte = *--pbyte;
-        case 5: *--qbyte = *--pbyte;
-        case 4: *--qbyte = *--pbyte;
+        case 7: *--q.byte = *--p.byte;
+        case 6: *--q.byte = *--p.byte;
+        case 5: *--q.byte = *--p.byte;
+        case 4: *--q.byte = *--p.byte;
 #endif
-        case 3: *--qbyte = *--pbyte;
-        case 2: *--qbyte = *--pbyte;
-        case 1: *--qbyte = *--pbyte;
+        case 3: *--q.byte = *--p.byte;
+        case 2: *--q.byte = *--p.byte;
+        case 1: *--q.byte = *--p.byte;
         case 0:
             break;
         default:
@@ -734,14 +716,14 @@ static inline void _region_move_right(void * src, void * dst, size_t sz)
 #if _CFG_RAW_ACCESS_ALIGNED
     else
     {
-        /* regions unaligned */ /* TODO: sliding window? */
+        /* regions unaligned */
 
-        uint8_t * pbyte = (uint8_t *)src + sz;
-        uint8_t * qbyte = (uint8_t *)dst + sz;
+        p.uint += sz;
+        q.uint += sz;
 
         while (sz != 0)
         {
-            *--qbyte = *--pbyte;
+            *--q.byte = *--p.byte;
             sz--;
         }
     }
@@ -749,11 +731,7 @@ static inline void _region_move_right(void * src, void * dst, size_t sz)
 
 #else
 
-#if CFG_AGNER_ACCESS
-    A_memmove(dst, src, sz);
-#else
-    memmove(dst, src, sz);
-#endif
+    T_MEMMOVE(dst, src, sz);
 
 #endif
 }
@@ -766,20 +744,17 @@ static inline void _region_move_left(void * src, void * dst, size_t sz)
 
 #else
 
-#if CFG_AGNER_ACCESS
-    A_memmove(dst, src, sz);
-#else
-    memmove(dst, src, sz);
-#endif
+    T_MEMMOVE(dst, src, sz);
 
 #endif
 }
 
+#if CFG_RAW_ACCESS
 #if _CFG_RAW_ACCESS_ALIGNED
 #undef T_MASK
 #endif
-
 #undef T_WORD
+#endif
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 /* allocate or adjust size of temporary storage if needed                                                                     */

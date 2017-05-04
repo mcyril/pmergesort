@@ -67,7 +67,7 @@ Configure algorithm parameters/settings using pre-processor directives (0 is ‘
 * **CFG\_PARALLEL\_USE\_PTHREADS**
     * enable use of pthreads based pool for multi-threading, default is off
 * **CFG\_RAW\_ACCESS**
-    * enable raw memory access (faster but might be unsafe, especially for unaligned memory blocks)
+    * enable raw memory access (faster, for unaligned memory blocks see **\_CFG\_RAW\_ACCESS\_ALIGNED**)
     * off - implies the using of memmove and memcpy
     * on - use raw memory access
     * default is on
@@ -77,14 +77,17 @@ Configure algorithm parameters/settings using pre-processor directives (0 is ‘
 Algorithms fine tuning and tweaks using pre-processor directives:
 
 * **\_CFG\_QUEUE\_OVERCOMMIT**
+* **\_CFG\_PARALLEL\_MAY\_SPAWN**
 * **\_CFG\_PRESORT**
 * **\_CFG\_USE\_4\_MEM**
 * **\_CFG\_USE\_8\_MEM**
 * **\_CFG\_USE\_16\_MEM**
+* **\_CFG\_RAW\_ACCESS\_ALIGNED**
 * **\_CFG\_TMP\_ROT**
 * **\_CFG\_MIN\_SUBMERGELEN**
 * **\_CFG\_MIN\_SUBMERGELEN1**
 * **\_CFG\_MIN\_SUBMERGELEN2**
+* **\_CFG\_BLOCKLEN\_MTHRESHOLD0**
 * **\_CFG\_BLOCKLEN\_MTHRESHOLD**
 * **\_CFG\_BLOCKLEN\_SYMMERGE**
 * **\_CFG\_BLOCKLEN\_MERGE**

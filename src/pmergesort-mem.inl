@@ -78,7 +78,8 @@ static inline void _M(rotate)(void * lo, void * mid, void * hi, size_t sz)
                 }
             }
 
-            _M(swap_r)(ELT_PTR_BCK_(mid, i, sz), mid, i, sz);
+            if (i > 0)
+                _M(swap_r)(ELT_PTR_BCK_(mid, i, sz), mid, i, sz);
         }
     }
 }

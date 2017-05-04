@@ -379,30 +379,33 @@ static void _(inplace_symmerge)(void * lo, void * mi, void * hi, context_t * ctx
         /* merge the 1st subsegments [lo, start) & [start, mid) recurrently
             (obviously it's the same size or shorter by 1 than the 2nd one) */
 
-#if CFG_PARALLEL && _CFG_PARALLEL_MAY_SPAWN
-        if (ctx->thpool != NULL && len > ctx->cut_off)
+        if (lo < start && start < mid)
         {
-            pmergesort_pass_context_t * pass_ctx = malloc(sizeof(pmergesort_pass_context_t));
-            pass_ctx->ctx = ctx;
-            pass_ctx->bsz = 0;
-            pass_ctx->dbl_bsz = 0;
-            pass_ctx->chunksz = 0;
-            pass_ctx->numchunks = 0;
-            pass_ctx->lo = lo;
-            pass_ctx->mi = start;
-            pass_ctx->hi = mid;
-            pass_ctx->effector = ctx->merge_effector;
-            pass_ctx->auxes = aux->parent;
+#if CFG_PARALLEL && _CFG_PARALLEL_MAY_SPAWN
+            if (ctx->thpool != NULL && len > ctx->cut_off)
+            {
+                pmergesort_pass_context_t * pass_ctx = malloc(sizeof(pmergesort_pass_context_t));
+                pass_ctx->ctx = ctx;
+                pass_ctx->bsz = 0;
+                pass_ctx->dbl_bsz = 0;
+                pass_ctx->chunksz = 0;
+                pass_ctx->numchunks = 0;
+                pass_ctx->lo = lo;
+                pass_ctx->mi = start;
+                pass_ctx->hi = mid;
+                pass_ctx->effector = ctx->merge_effector;
+                pass_ctx->auxes = aux->parent;
 
 #if CFG_PARALLEL_USE_PTHREADS
-            thr_pool_queue(ctx->thpool, _(merge_spawn_pass_ex), pass_ctx);
+                thr_pool_queue(ctx->thpool, _(merge_spawn_pass_ex), pass_ctx);
 #elif CFG_PARALLEL_USE_GCD
-            dispatch_group_async_f(ctx->thpool->group, ctx->thpool->queue, pass_ctx, _(merge_spawn_pass));
+                dispatch_group_async_f(ctx->thpool->group, ctx->thpool->queue, pass_ctx, _(merge_spawn_pass));
 #endif
+            }
+            else
+#endif
+                _(inplace_symmerge)(lo, start, mid, ctx, aux);
         }
-        else
-#endif
-            _(inplace_symmerge)(lo, start, mid, ctx, aux);
 
         /* merge the 2nd subsegments [mid, end) & [end, hi) here instead of
             recurrent call of _(inplace_symmerge)(mid, end, hi, ctx, aux) */
@@ -492,33 +495,38 @@ static __attribute__((unused)) void _(aux_symmerge)(void * lo, void * mi, void *
         /* merge the 1st subsegments [lo, start) & [start, mid) recurrently
             (obviously it's the same size or shorter by 1 than the 2nd one) */
 
-#if CFG_PARALLEL && _CFG_PARALLEL_MAY_SPAWN
-        if (ctx->thpool != NULL && len > ctx->cut_off)
+        if (lo < start && start < mid)
         {
-            pmergesort_pass_context_t * pass_ctx = malloc(sizeof(pmergesort_pass_context_t));
-            pass_ctx->ctx = ctx;
-            pass_ctx->bsz = 0;
-            pass_ctx->dbl_bsz = 0;
-            pass_ctx->chunksz = 0;
-            pass_ctx->numchunks = 0;
-            pass_ctx->lo = lo;
-            pass_ctx->mi = start;
-            pass_ctx->hi = mid;
-            pass_ctx->effector = ctx->merge_effector;
-            pass_ctx->auxes = aux->parent;
+#if CFG_PARALLEL && _CFG_PARALLEL_MAY_SPAWN
+            if (ctx->thpool != NULL && len > ctx->cut_off)
+            {
+                pmergesort_pass_context_t * pass_ctx = malloc(sizeof(pmergesort_pass_context_t));
+                pass_ctx->ctx = ctx;
+                pass_ctx->bsz = 0;
+                pass_ctx->dbl_bsz = 0;
+                pass_ctx->chunksz = 0;
+                pass_ctx->numchunks = 0;
+                pass_ctx->lo = lo;
+                pass_ctx->mi = start;
+                pass_ctx->hi = mid;
+                pass_ctx->effector = ctx->merge_effector;
+                pass_ctx->auxes = aux->parent;
 
 #if CFG_PARALLEL_USE_PTHREADS
-            thr_pool_queue(ctx->thpool, _(merge_spawn_pass_ex), pass_ctx);
+                thr_pool_queue(ctx->thpool, _(merge_spawn_pass_ex), pass_ctx);
 #elif CFG_PARALLEL_USE_GCD
-            dispatch_group_async_f(ctx->thpool->group, ctx->thpool->queue, pass_ctx, _(merge_spawn_pass));
+                dispatch_group_async_f(ctx->thpool->group, ctx->thpool->queue, pass_ctx, _(merge_spawn_pass));
 #endif
-        }
-        else
+            }
+            else
 #endif
-            _(aux_symmerge)(lo, start, mid, ctx, aux);
+            {
+                _(aux_symmerge)(lo, start, mid, ctx, aux);
 
-        if (aux->rc != 0)
-            break; /* bail out */
+                if (aux->rc != 0)
+                    break; /* bail out */
+            }
+        }
 
         /* merge the 2nd subsegments [mid, end) & [end, hi) here instead of
             recurrent call of _(aux_symmerge)(mid, end, hi, ctx, aux) */
@@ -1000,7 +1008,7 @@ static inline int _(pmergesort_impl)(context_t * ctx)
 
             thr_pool_wait(ctx->thpool);
 
-            for (int i = 0; i < ctx->ncpu; i++)
+            for (int i = 0; i < numchunks; i++)
             {
                 if (auxes[i].rc != 0)
                     goto bail_out;
@@ -1055,7 +1063,7 @@ static inline int _(pmergesort_impl)(context_t * ctx)
 
             thr_pool_wait(ctx->thpool);
 
-            for (int i = 0; i < ctx->ncpu; i++)
+            for (int i = 0; i < numchunks; i++)
             {
                 if (auxes[i].rc != 0)
                     goto bail_out;
@@ -1135,7 +1143,7 @@ static inline int _(pmergesort_impl)(context_t * ctx)
         {
             dispatch_apply_f(numchunks, queue, &pass1_ctx, _(sort_chunk_pass));
 
-            for (int i = 0; i < ctx->ncpu; i++)
+            for (int i = 0; i < numchunks; i++)
             {
                 if (auxes[i].rc != 0)
                     goto bail_out;
@@ -1189,7 +1197,7 @@ static inline int _(pmergesort_impl)(context_t * ctx)
                 dispatch_group_wait(pool.group, DISPATCH_TIME_FOREVER);
 #endif
 
-                for (int i = 0; i < ctx->ncpu; i++)
+                for (int i = 0; i < numchunks; i++)
                 {
                     if (auxes[i].rc != 0)
                         goto bail_out;
@@ -1238,7 +1246,7 @@ bail_out:;
 
 static inline void _(symmergesort)(context_t * ctx)
 {
-    if (ctx->n < _CFG_BLOCKLEN_MTHRESHOLD * _CFG_BLOCKLEN_SYMMERGE)
+    if (ctx->n < _CFG_BLOCKLEN_MTHRESHOLD0 * _CFG_BLOCKLEN_SYMMERGE)
     {
         void * lo = (void *)ctx->base;
         void * hi = ELT_PTR_FWD(ctx, lo, ctx->n);
@@ -1321,7 +1329,7 @@ static inline void _(symmergesort)(context_t * ctx)
 
 static inline int _(pmergesort)(context_t * ctx)
 {
-    if (ctx->n < _CFG_BLOCKLEN_MTHRESHOLD * _CFG_BLOCKLEN_SYMMERGE)
+    if (ctx->n < _CFG_BLOCKLEN_MTHRESHOLD0 * _CFG_BLOCKLEN_SYMMERGE)
     {
         void * lo = (void *)ctx->base;
         void * hi = ELT_PTR_FWD(ctx, lo, ctx->n);
@@ -1420,7 +1428,7 @@ static __attribute__((unused)) void _(wrap_sort)(void * lo, __unused void * mi, 
 static inline int _(wrapmergesort)(context_t * ctx)
 {
 #if CFG_PARALLEL
-    if (ctx->n >= 2 * _CFG_BLOCKLEN_MTHRESHOLD * _CFG_BLOCKLEN_SYMMERGE)
+    if (ctx->n >= 2 * _CFG_BLOCKLEN_MTHRESHOLD0 * _CFG_BLOCKLEN_SYMMERGE)
     {
         for (int ncpu = ctx->ncpu; ncpu > 1; ncpu--)
         {
