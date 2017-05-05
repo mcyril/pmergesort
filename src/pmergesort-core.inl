@@ -322,16 +322,6 @@ static void _(inplace_symmerge)(void * lo, void * mi, void * hi, context_t * ctx
 
     while (lo < mi && mi < hi)
     {
-        /* total length */
-        size_t len = ELT_DIST(ctx, hi, lo);
-
-        /* fallback to linear merge for short pairs */
-        if (len < _CFG_MIN_SUBMERGELEN)
-        {
-            _(inplace_merge)(lo, mi, hi, ctx, NULL);
-            break; /* we're done */
-        }
-
         /* left segment size */
         size_t llen = ELT_DIST(ctx, mi, lo);
 
@@ -341,6 +331,9 @@ static void _(inplace_symmerge)(void * lo, void * mi, void * hi, context_t * ctx
             _(inplace_merge_l2r)(lo, mi, hi, ctx);
             break; /* we're done */
         }
+
+        /* total length */
+        size_t len = ELT_DIST(ctx, hi, lo);
 
         /* right segment size */
         size_t rlen = len - llen;
@@ -436,16 +429,6 @@ static __attribute__((unused)) void _(aux_symmerge)(void * lo, void * mi, void *
 
     while (lo < mi && mi < hi)
     {
-        /* total length */
-        size_t len = ELT_DIST(ctx, hi, lo);
-
-        /* fallback to linear merge for short pairs */
-        if (len < _CFG_MIN_SUBMERGELEN)
-        {
-            _(inplace_merge)(lo, mi, hi, ctx, NULL);
-            break; /* we're done */
-        }
-
         /* left segment size */
         size_t llen = ELT_DIST(ctx, mi, lo);
 
@@ -455,6 +438,9 @@ static __attribute__((unused)) void _(aux_symmerge)(void * lo, void * mi, void *
             _(inplace_merge_l2r)(lo, mi, hi, ctx);
             break; /* we're done */
         }
+
+        /* total length */
+        size_t len = ELT_DIST(ctx, hi, lo);
 
         /* right segment size */
         size_t rlen = len - llen;
@@ -690,14 +676,6 @@ static inline void _(aux_merge)(void * lo, void * mi, void * hi, context_t * ctx
             return; /* we're done */
 
         void * inshi = _(ip)(ELT_PTR_PREV(ctx, mi), mi, hi, 0, ctx);
-
-        /* fallback to linear merge for short pairs */
-
-        if (ELT_DIST(ctx, inshi, inslo) < _CFG_MIN_SUBMERGELEN)
-        {
-            _(inplace_merge)(inslo, mi, inshi, ctx, NULL);
-            return; /* we're done */
-        }
 
         /* merge shortest segment */
 
@@ -943,7 +921,7 @@ void _(merge_chunks_pass)(void * arg, size_t chunk)
         pass_ctx->effector(a, ELT_PTR_FWD(pass_ctx->ctx, a, pass_ctx->bsz), c, pass_ctx->ctx, aux);
 
 #if CFG_PARALLEL_USE_GCD && _CFG_PARALLEL_MAY_SPAWN
-        dispatch_semaphore_signal(pass_ctx->ctx->thpool->mutex); /* report processed */
+    dispatch_semaphore_signal(pass_ctx->ctx->thpool->mutex); /* report processed */
 #endif
 }
 

@@ -84,7 +84,6 @@ Algorithms fine tuning and tweaks using pre-processor directives:
 * **\_CFG\_USE\_16\_MEM**
 * **\_CFG\_RAW\_ACCESS\_ALIGNED**
 * **\_CFG\_TMP\_ROT**
-* **\_CFG\_MIN\_SUBMERGELEN**
 * **\_CFG\_MIN\_SUBMERGELEN1**
 * **\_CFG\_MIN\_SUBMERGELEN2**
 * **\_CFG\_BLOCKLEN\_MTHRESHOLD0**

@@ -104,7 +104,6 @@
 
 #define _CFG_TMP_ROT                8   /* max. temp. elements at stack on rotate */
 
-#define _CFG_MIN_SUBMERGELEN        16  /* threshold to fallback from inplace symmerge to inplace merge */
 #define _CFG_MIN_SUBMERGELEN1       8   /* threshold to fallback from inplace symmerge to inplace merge
                                             for short left/right segment */
 #define _CFG_MIN_SUBMERGELEN2       4   /* threshold to fallback from binary to linear search
