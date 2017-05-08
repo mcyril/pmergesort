@@ -60,12 +60,12 @@ The prototype of reentrant **wrapmergesort\_r** has function declaration similar
 
 Configure algorithm parameters/settings using pre-processor directives (0 is ‘off’, 1 is ‘on’):
 
-* **CFG\_PARALLEL**
-    * enable build parallel merge sort algorithms, default is on
 * **CFG\_PARALLEL\_USE\_GCD**
     * enable use of GCD for multi-threading, default is on
 * **CFG\_PARALLEL\_USE\_PTHREADS**
     * enable use of pthreads based pool for multi-threading, default is off
+* **CFG_PARALLEL\_USE\_OMP**
+    * enable use of OpenMP® for multi-threading (experimental), default is off
 * **CFG\_RAW\_ACCESS**
     * enable raw memory access (faster, for unaligned memory blocks see **\_CFG\_RAW\_ACCESS\_ALIGNED**)
     * off - implies the using of memmove and memcpy
@@ -74,9 +74,12 @@ Configure algorithm parameters/settings using pre-processor directives (0 is ‘
 * **CFG\_AGNER\_ACCESS**
     * enable Agner Fog asmlib memory access, default is off, [http://www.agner.org/optimize/](http://www.agner.org/optimize/) (mostly as example of alternative memory management integration, do not expect performance improvement with it)
 
+To enable the build of parallel merge sort algorithms set one of **CFG\_PARALLEL\_USE\_GCD**, **CFG\_PARALLEL\_USE\_PTHREADS**, or **CFG_PARALLEL\_USE\_OMP** on.
+
 Algorithms fine tuning and tweaks using pre-processor directives:
 
 * **\_CFG\_QUEUE\_OVERCOMMIT**
+* **\_CFG\_GCD\_OVERCOMMIT**
 * **\_CFG\_PARALLEL\_MAY\_SPAWN**
 * **\_CFG\_PRESORT**
 * **\_CFG\_USE\_4\_MEM**

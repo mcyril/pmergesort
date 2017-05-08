@@ -17,16 +17,16 @@
 /* configure build                                                                                                            */
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#ifndef CFG_PARALLEL
-#define CFG_PARALLEL                1   /* enable build parallel merge sort algorithms */
-#endif
-
 #ifndef CFG_PARALLEL_USE_GCD
-#define CFG_PARALLEL_USE_GCD        1   /* enable use of GCD for multi-threading */
+#define CFG_PARALLEL_USE_GCD        1   /* enable build of parallel merge sort algorithms, use GCD */
 #endif
 
 #ifndef CFG_PARALLEL_USE_PTHREADS
-#define CFG_PARALLEL_USE_PTHREADS   0   /* enable use of pthreads based pool for multi-threading */
+#define CFG_PARALLEL_USE_PTHREADS   0   /* enable build of parallel merge sort algorithms, use pthreads based pool */
+#endif
+
+#ifndef CFG_PARALLEL_USE_OMP
+#define CFG_PARALLEL_USE_OMP        0   /* enable build of parallel merge sort algorithms, use OpenMP */
 #endif
 
 #ifndef CFG_RAW_ACCESS
@@ -50,37 +50,31 @@
 #else
 /* sentinel (temporary) */
 #   undef  CFG_PARALLEL_USE_GCD
-#   define CFG_PARALLEL_USE_GCD        0
+#   define CFG_PARALLEL_USE_GCD         0
 #   undef  CFG_PARALLEL_USE_PTHREADS
-#   define CFG_PARALLEL_USE_PTHREADS   1
+#   define CFG_PARALLEL_USE_PTHREADS    1
+#   undef  CFG_PARALLEL_USE_OMP
+#   define CFG_PARALLEL_USE_OMP         0
 #endif
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 /* parallel fine tunings                                                                                                      */
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#if CFG_PARALLEL
-
-#if !CFG_PARALLEL_USE_PTHREADS && CFG_PARALLEL_USE_GCD
-/*  GCD, assume Mac OS X  */
+#if CFG_PARALLEL_USE_GCD && !CFG_PARALLEL_USE_PTHREADS && !CFG_PARALLEL_USE_OMP
+/*  parallel, GCD, assume Mac OS X  */
 #   if !defined(MAC_OS_X_VERSION_10_6) || MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_6
 #   error define CFG_PARALLEL_USE_PTHREADS to use parallel sort with pre-Mac OS X 10.6
 #   endif
-#elif CFG_PARALLEL_USE_PTHREADS && !CFG_PARALLEL_USE_GCD
-/*  pthreads  */
+#elif !CFG_PARALLEL_USE_GCD && CFG_PARALLEL_USE_PTHREADS && !CFG_PARALLEL_USE_OMP
+/*  parallel, pthreads  */
+#elif !CFG_PARALLEL_USE_GCD && !CFG_PARALLEL_USE_PTHREADS && CFG_PARALLEL_USE_OMP
+/*  parallel, OpenMP (if applicable)  */
+#elif !CFG_PARALLEL_USE_GCD && !CFG_PARALLEL_USE_PTHREADS && !CFG_PARALLEL_USE_OMP
+/*  single-threaded  */
 #else
-#   error to use parallel sort either CFG_PARALLEL_USE_PTHREADS or CFG_PARALLEL_USE_GCD should be defined
+#   error CFG_PARALLEL_USE_* misconfiguration
 #endif
-
-#else
-
-/* sentinel */
-#   undef  CFG_PARALLEL_USE_GCD
-#   define CFG_PARALLEL_USE_GCD        0
-#   undef  CFG_PARALLEL_USE_PTHREADS
-#   define CFG_PARALLEL_USE_PTHREADS   0
-
-#endif /* CFG_PARALLEL */
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 /* fine tunings                                                                                                               */
@@ -91,7 +85,10 @@
                                             see Apple Co. CoreFoundation source */
 #endif
 
-#define _CFG_PARALLEL_MAY_SPAWN     1   /* allow symmerge to spawn nested threads, TODO: more adaptive */
+#define _CFG_GCD_OVERCOMMIT         0   /* allow overcommit GCD queue beyond of the number CPU cores */
+
+#define _CFG_PARALLEL_MAY_SPAWN     1 && (CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS || CFG_PARALLEL_USE_OMP)
+                                                    /* allow symmerge to spawn nested threads */
 
 #define _CFG_PRESORT                binsort_run     /* method of pre-sort for initial subsegments,
                                                         allowed: binsort, binsort_run, and binsort_mergerun */
@@ -119,7 +116,7 @@
 
 typedef struct thr_pool thr_pool_t;
 
-#if CFG_PARALLEL
+#if CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS || CFG_PARALLEL_USE_OMP
 
 #ifdef __APPLE__
 #include <sys/sysctl.h>
@@ -178,11 +175,12 @@ static __attribute__((noinline)) size_t cutOff(size_t n)
 
 #if CFG_PARALLEL_USE_PTHREADS
     return s << 4;
-#elif CFG_PARALLEL_USE_GCD
+#elif CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_OMP
     return s << 2;
 #endif
 }
 
+#if !CFG_PARALLEL_USE_OMP
 static void __numCPU_initialize(_CFG_ONCE_ARG)
 {
 #ifdef __APPLE__
@@ -213,6 +211,7 @@ static void __numCPU_initialize(_CFG_ONCE_ARG)
         _ncpu = (int32_t)ncpu;
 #endif
 }
+#endif /* CFG_PARALLEL_USE_OMP */
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 #if CFG_PARALLEL_USE_PTHREADS
@@ -278,9 +277,18 @@ struct thr_pool
     dispatch_queue_t        queue;
 #if _CFG_PARALLEL_MAY_SPAWN
     dispatch_group_t        group;
+#if !_CFG_GCD_OVERCOMMIT
     dispatch_semaphore_t    mutex; /* semaphore to prevent the threads overcommit flood */
 #endif
+#endif
 };
+
+#ifdef __PGI
+// PGI compiler __attribute__((__transparent_union__)) "hack"
+#define DISPATCH_OBJECT_T(o) ((dispatch_object_t){ (void *)(o) })
+#else
+#define DISPATCH_OBJECT_T(o) (o)
+#endif
 
 #if _CFG_QUEUE_OVERCOMMIT
 /*!
@@ -314,10 +322,35 @@ static dispatch_once_t _once;
 /* -------------------------------------------------------------------------------------------------------------------------- */
 #define thPool()    ((thr_pool_t *)0)
 /* -------------------------------------------------------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------------------------------------------------------- */
+#elif CFG_PARALLEL_USE_OMP
+/* -------------------------------------------------------------------------------------------------------------------------- */
+#include <omp.h>
+/* -------------------------------------------------------------------------------------------------------------------------- */
+
+struct thr_pool
+{
+    size_t  ncpu;
+};
+
+/* -------------------------------------------------------------------------------------------------------------------------- */
+
+static inline int numCPU()
+{
+    if (_ncpu <= 0)
+        _ncpu = omp_get_num_procs();
+
+    return (int)_ncpu;
+}
+
+/* -------------------------------------------------------------------------------------------------------------------------- */
+#define thPool()    ((thr_pool_t *)0)
+/* -------------------------------------------------------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------------------------------------------------------- */
 #endif /* CFG_PARALLEL_USE_PTHREADS */
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#else /* CFG_PARALLEL */
+#else /* CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS || CFG_PARALLEL_USE_OMP */
 
 #if CFG_CORE_PROFILE
 void pmergesort_nCPU(int32_t ncpu)
@@ -332,7 +365,7 @@ void pmergesort_nCPU(int32_t ncpu)
 #define cutOff(n)   (0)
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#endif /* CFG_PARALLEL */
+#endif /* CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS */
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
@@ -387,7 +420,7 @@ struct _context
 };
 typedef struct _context context_t;
 
-#if CFG_PARALLEL
+#if CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS
 struct _pmergesort_pass_context
 {
     context_t *     ctx;
