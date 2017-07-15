@@ -628,7 +628,7 @@ static inline void _(aux_merge_r)(void * lo, void * mi, void * hi, context_t * c
         _M(copy)(rsrclo, ELT_PTR_BCK(ctx, dst, tailsz), tailsz, sz);
     }
 
-    /* no need to copy from left to self */
+    /* no need to copy from left to itself */
 }
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
@@ -690,7 +690,7 @@ static inline void _(aux_merge_l)(void * lo, void * mi, void * hi, context_t * c
         _M(copy)(lsrclo, dst, ELT_DIST(ctx, lsrchi, lsrclo), sz);
     }
 
-    /* no need to copy from right to self */
+    /* no need to copy from right to itself */
 }
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
@@ -710,6 +710,16 @@ static inline void _(aux_merge)(void * lo, void * mi, void * hi, context_t * ctx
             return; /* we're done */
 
         void * inshi = _(ip)(ELT_PTR_PREV(ctx, mi), mi, hi, 0, ctx);
+
+#if 1
+        /* should just swap segments */
+
+        if (CALL_CMP(ctx, inslo, ELT_PTR_PREV(ctx, inshi)) > 0)
+        {
+            _M(rotate_aux)(inslo, mi, inshi, ELT_SZ(ctx), aux);
+            return; /* we're done */
+        }
+#endif
 
         /* merge shortest segment */
 
