@@ -40,21 +40,21 @@ static inline void _M(rotate)(void * lo, void * mid, void * hi, size_t sz)
         size_t i = ELT_DIST_(mid, lo, sz);
         size_t j = ELT_DIST_(hi, mid, sz);
 
-        if (i > j && j <= _CFG_TMP_ROT)
+        if (i > j && j <= _PMR_TMP_ROT)
         {
-            /* up to _CFG_TMP_ROT temp values to put at stack temporary storage */
+            /* up to _PMR_TMP_ROT temp values to put at stack temporary storage */
 
-            uint8_t t[ELT_OF_SZ(_CFG_TMP_ROT, sz)];
+            uint8_t t[ELT_OF_SZ(_PMR_TMP_ROT, sz)];
 
             _M(copy)(mid, t, j, sz);
             _M(move_right)(lo, i, j, sz);
             _M(copy)(t, lo, j, sz);
         }
-        else if (j >= i && i <= _CFG_TMP_ROT)
+        else if (j >= i && i <= _PMR_TMP_ROT)
         {
-            /* up to _CFG_TMP_ROT temp values to put at stack temporary storage */
+            /* up to _PMR_TMP_ROT temp values to put at stack temporary storage */
 
-            uint8_t t[ELT_OF_SZ(_CFG_TMP_ROT, sz)];
+            uint8_t t[ELT_OF_SZ(_PMR_TMP_ROT, sz)];
 
             _M(copy)(lo, t, i, sz);
             _M(move_left)(mid, j, i, sz);
@@ -97,11 +97,11 @@ static inline void _M(rotate_aux)(void * lo, void * mid, void * hi, size_t sz, a
 
         if (i > j)
         {
-            if (j <= _CFG_TMP_ROT)
+            if (j <= _PMR_TMP_ROT)
             {
-                /* up to _CFG_TMP_ROT temp values to put at stack temporary storage */
+                /* up to _PMR_TMP_ROT temp values to put at stack temporary storage */
 
-                uint8_t t[ELT_OF_SZ(_CFG_TMP_ROT, sz)];
+                uint8_t t[ELT_OF_SZ(_PMR_TMP_ROT, sz)];
 
                 _M(copy)(mid, t, j, sz);
                 _M(move_right)(lo, i, j, sz);
@@ -121,11 +121,11 @@ static inline void _M(rotate_aux)(void * lo, void * mid, void * hi, size_t sz, a
         }
         else /* j >= i */
         {
-            if (i <= _CFG_TMP_ROT)
+            if (i <= _PMR_TMP_ROT)
             {
-                /* up to _CFG_TMP_ROT temp values to put at stack temporary storage */
+                /* up to _PMR_TMP_ROT temp values to put at stack temporary storage */
 
-                uint8_t t[ELT_OF_SZ(_CFG_TMP_ROT, sz)];
+                uint8_t t[ELT_OF_SZ(_PMR_TMP_ROT, sz)];
 
                 _M(copy)(lo, t, i, sz);
                 _M(move_left)(mid, j, i, sz);

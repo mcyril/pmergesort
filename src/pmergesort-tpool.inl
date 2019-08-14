@@ -249,7 +249,7 @@ static void * worker_thread(void * arg)
             pool->pool_active = &active;
             (void) pthread_mutex_unlock(&pool->pool_mutex);
             pthread_cleanup_push((void (*)(void *))job_cleanup, pool);
-            free(job);
+            PMR_FREE(job);
             /*
              * Call the specified job function.
              */
@@ -335,7 +335,7 @@ static thr_pool_t * thr_pool_create(int min_threads, int max_threads, unsigned i
         return NULL;
     }
 
-    if ((pool = malloc(sizeof(*pool))) == NULL)
+    if ((pool = PMR_MALLOC(sizeof(*pool))) == NULL)
     {
         errno = ENOMEM;
         return NULL;
@@ -403,7 +403,7 @@ static int thr_pool_queue(thr_pool_t * pool, void * (*func)(void *), void * arg)
 {
     job_t * job;
 
-    if ((job = malloc(sizeof (*job))) == NULL)
+    if ((job = PMR_MALLOC(sizeof (*job))) == NULL)
     {
         errno = ENOMEM;
         return -1;
@@ -499,12 +499,12 @@ static void thr_pool_destroy(thr_pool_t * pool)
     for (job = pool->pool_head; job != NULL; job = pool->pool_head)
     {
         pool->pool_head = job->job_next;
-        free(job);
+        PMR_FREE(job);
     }
 
     (void)pthread_attr_destroy(&pool->pool_attr);
 
-    free(pool);
+    PMR_FREE(pool);
 }
 
 /* -------------------------------------------------------------------------------------------------------------------------- */

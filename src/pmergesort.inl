@@ -7,7 +7,7 @@
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#if _CFG_USE_4_MEM
+#if _PMR_USE_4_MEM
 
 #define SORT_SUFFIX                 4
 
@@ -31,7 +31,7 @@
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#if _CFG_USE_8_MEM
+#if _PMR_USE_8_MEM
 
 #define SORT_SUFFIX                 8
 
@@ -55,7 +55,7 @@
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#if _CFG_USE_16_MEM
+#if _PMR_USE_16_MEM
 
 #define SORT_SUFFIX                 16
 
@@ -104,17 +104,17 @@ static inline void _F(symmergesort)(context_t * ctx)
 {
     switch (ctx->sz)
     {
-#if _CFG_USE_4_MEM
+#if _PMR_USE_4_MEM
     case 4:
         _F(_symmergesort_4)(ctx);
         break;
 #endif
-#if _CFG_USE_8_MEM
+#if _PMR_USE_8_MEM
     case 8:
         _F(_symmergesort_8)(ctx);
         break;
 #endif
-#if _CFG_USE_16_MEM
+#if _PMR_USE_16_MEM
     case 16:
         _F(_symmergesort_16)(ctx);
         break;
@@ -131,15 +131,15 @@ static inline int _F(pmergesort)(context_t * ctx)
 {
     switch (ctx->sz)
     {
-#if _CFG_USE_4_MEM
+#if _PMR_USE_4_MEM
     case 4:
         return _F(_pmergesort_4)(ctx);
 #endif
-#if _CFG_USE_8_MEM
+#if _PMR_USE_8_MEM
     case 8:
         return _F(_pmergesort_8)(ctx);
 #endif
-#if _CFG_USE_16_MEM
+#if _PMR_USE_16_MEM
     case 16:
         return _F(_pmergesort_16)(ctx);
 #endif
@@ -154,15 +154,15 @@ static inline int _F(wrapmergesort)(context_t * ctx)
 {
     switch (ctx->sz)
     {
-#if _CFG_USE_4_MEM
+#if _PMR_USE_4_MEM
     case 4:
         return _F(_wrapmergesort_4)(ctx);
 #endif
-#if _CFG_USE_8_MEM
+#if _PMR_USE_8_MEM
     case 8:
         return _F(_wrapmergesort_8)(ctx);
 #endif
-#if _CFG_USE_16_MEM
+#if _PMR_USE_16_MEM
     case 16:
         return _F(_wrapmergesort_16)(ctx);
 #endif
@@ -173,22 +173,22 @@ static inline int _F(wrapmergesort)(context_t * ctx)
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#if CFG_CORE_PROFILE
+#if _PMR_CORE_PROFILE
 static inline void _F(insertionsort)(context_t * ctx)
 {
     switch (ctx->sz)
     {
-#if _CFG_USE_4_MEM
+#if _PMR_USE_4_MEM
     case 4:
         _F(_insertionsort_4)(ctx);
         break;
 #endif
-#if _CFG_USE_8_MEM
+#if _PMR_USE_8_MEM
     case 8:
         _F(_insertionsort_8)(ctx);
         break;
 #endif
-#if _CFG_USE_16_MEM
+#if _PMR_USE_16_MEM
     case 16:
         _F(_insertionsort_16)(ctx);
         break;
@@ -202,22 +202,22 @@ static inline void _F(insertionsort)(context_t * ctx)
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#if CFG_CORE_PROFILE
+#if _PMR_CORE_PROFILE
 static inline void _F(insertionsort_run)(context_t * ctx)
 {
     switch (ctx->sz)
     {
-#if _CFG_USE_4_MEM
+#if _PMR_USE_4_MEM
     case 4:
         _F(_insertionsort_run_4)(ctx);
         break;
 #endif
-#if _CFG_USE_8_MEM
+#if _PMR_USE_8_MEM
     case 8:
         _F(_insertionsort_run_8)(ctx);
         break;
 #endif
-#if _CFG_USE_16_MEM
+#if _PMR_USE_16_MEM
     case 16:
         _F(_insertionsort_run_16)(ctx);
         break;
@@ -231,22 +231,22 @@ static inline void _F(insertionsort_run)(context_t * ctx)
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#if CFG_CORE_PROFILE
+#if _PMR_CORE_PROFILE
 static inline void _F(insertionsort_mergerun)(context_t * ctx)
 {
     switch (ctx->sz)
     {
-#if _CFG_USE_4_MEM
+#if _PMR_USE_4_MEM
     case 4:
         _F(_insertionsort_mergerun_4)(ctx);
         break;
 #endif
-#if _CFG_USE_8_MEM
+#if _PMR_USE_8_MEM
     case 8:
         _F(_insertionsort_mergerun_8)(ctx);
         break;
 #endif
-#if _CFG_USE_16_MEM
+#if _PMR_USE_16_MEM
     case 16:
         _F(_insertionsort_mergerun_16)(ctx);
         break;

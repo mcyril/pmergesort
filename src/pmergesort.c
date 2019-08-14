@@ -17,28 +17,48 @@
 /* configure build                                                                                                            */
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#ifndef CFG_PARALLEL_USE_GCD
-#define CFG_PARALLEL_USE_GCD        1   /* enable build of parallel merge sort algorithms, use GCD */
+#ifndef PMR_PARALLEL_USE_GCD
+#define PMR_PARALLEL_USE_GCD        1   /* enable build of parallel merge sort algorithms, use GCD */
 #endif
 
-#ifndef CFG_PARALLEL_USE_PTHREADS
-#define CFG_PARALLEL_USE_PTHREADS   0   /* enable build of parallel merge sort algorithms, use pthreads based pool */
+#ifndef PMR_PARALLEL_USE_PTHREADS
+#define PMR_PARALLEL_USE_PTHREADS   0   /* enable build of parallel merge sort algorithms, use pthreads based pool */
 #endif
 
-#ifndef CFG_PARALLEL_USE_OMP
-#define CFG_PARALLEL_USE_OMP        0   /* enable build of parallel merge sort algorithms, use OpenMP */
+#ifndef PMR_PARALLEL_USE_OMP
+#define PMR_PARALLEL_USE_OMP        0   /* enable build of parallel merge sort algorithms, use OpenMP */
 #endif
 
-#ifndef CFG_RAW_ACCESS
-#define CFG_RAW_ACCESS              1   /* enable raw memory access, 0 implies the using of memmove & memcpy */
+#ifndef PMR_RAW_ACCESS
+#define PMR_RAW_ACCESS              1   /* enable raw memory access, 0 implies the using of memmove & memcpy */
 #endif
 
-#ifndef CFG_AGNER_ACCESS
-#define CFG_AGNER_ACCESS            0   /* enable Agner Fog asmlib memory access, http://www.agner.org/optimize/ */
+#ifndef PMR_RAW_ACCESS_ALIGNED
+#define PMR_RAW_ACCESS_ALIGNED      0   /* enable aligned raw memory access */
 #endif
 
-#ifndef CFG_CORE_PROFILE
-#define CFG_CORE_PROFILE            0
+/* -------------------------------------------------------------------------------------------------------------------------- */
+/* atomic memory function                                                                                                     */
+/* -------------------------------------------------------------------------------------------------------------------------- */
+
+#ifndef PMR_MEMCPY
+#define PMR_MEMCPY(d,s,n)           memcpy((d),(s),(n))
+#endif
+
+#ifndef PMR_MEMMOVE
+#define PMR_MEMMOVE(d,s,n)          memmove((d),(s),(n))
+#endif
+
+#ifndef PMR_MALLOC
+#define PMR_MALLOC(s)               malloc((s))
+#endif
+
+#ifndef PMR_REALLOC
+#define PMR_REALLOC(p,s)            realloc((p),(s))
+#endif
+
+#ifndef PMR_FREE
+#define PMR_FREE(p)                 free((p))
 #endif
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
@@ -47,76 +67,86 @@
 
 #ifdef __APPLE__
 #include <AvailabilityMacros.h>
-#else
-/* sentinel (temporary) */
-#   undef  CFG_PARALLEL_USE_GCD
-#   define CFG_PARALLEL_USE_GCD         0
-#   undef  CFG_PARALLEL_USE_PTHREADS
-#   define CFG_PARALLEL_USE_PTHREADS    1
-#   undef  CFG_PARALLEL_USE_OMP
-#   define CFG_PARALLEL_USE_OMP         0
+#elif PMR_PARALLEL_USE_GCD || PMR_PARALLEL_USE_PTHREADS || PMR_PARALLEL_USE_OMP
+/* sentinel (temporary): reset to pthreads any attempt to compile parallel */
+#   undef  PMR_PARALLEL_USE_GCD
+#   define PMR_PARALLEL_USE_GCD         0
+#   undef  PMR_PARALLEL_USE_PTHREADS
+#   define PMR_PARALLEL_USE_PTHREADS    1
+#   undef  PMR_PARALLEL_USE_OMP
+#   define PMR_PARALLEL_USE_OMP         0
 #endif
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 /* parallel fine tunings                                                                                                      */
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#if CFG_PARALLEL_USE_GCD && !CFG_PARALLEL_USE_PTHREADS && !CFG_PARALLEL_USE_OMP
+#if PMR_PARALLEL_USE_GCD && !PMR_PARALLEL_USE_PTHREADS && !PMR_PARALLEL_USE_OMP
 /*  parallel, GCD, assume Mac OS X  */
 #   if !defined(MAC_OS_X_VERSION_10_6) || MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_6
-#   error define CFG_PARALLEL_USE_PTHREADS to use parallel sort with pre-Mac OS X 10.6
+#   error define PMR_PARALLEL_USE_PTHREADS to use parallel sort with pre-Mac OS X 10.6
 #   endif
-#elif !CFG_PARALLEL_USE_GCD && CFG_PARALLEL_USE_PTHREADS && !CFG_PARALLEL_USE_OMP
+#elif !PMR_PARALLEL_USE_GCD && PMR_PARALLEL_USE_PTHREADS && !PMR_PARALLEL_USE_OMP
 /*  parallel, pthreads  */
-#elif !CFG_PARALLEL_USE_GCD && !CFG_PARALLEL_USE_PTHREADS && CFG_PARALLEL_USE_OMP
+#elif !PMR_PARALLEL_USE_GCD && !PMR_PARALLEL_USE_PTHREADS && PMR_PARALLEL_USE_OMP
 /*  parallel, OpenMP (if applicable)  */
-#elif !CFG_PARALLEL_USE_GCD && !CFG_PARALLEL_USE_PTHREADS && !CFG_PARALLEL_USE_OMP
+#elif !PMR_PARALLEL_USE_GCD && !PMR_PARALLEL_USE_PTHREADS && !PMR_PARALLEL_USE_OMP
 /*  single-threaded  */
 #else
-#   error CFG_PARALLEL_USE_* misconfiguration
+#   error PMR_PARALLEL_USE_* misconfiguration
 #endif
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 /* fine tunings                                                                                                               */
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#ifndef _CFG_QUEUE_OVERCOMMIT
-#define _CFG_QUEUE_OVERCOMMIT       0   /* use private GCD queue attribute to force number of threads,
+#ifndef _PMR_CORE_PROFILE
+#define _PMR_CORE_PROFILE           0   /* used for profiling */
+#endif
+
+#ifndef _PMR_QUEUE_OVERCOMMIT
+#define _PMR_QUEUE_OVERCOMMIT       0   /* use private GCD queue attribute to force number of threads,
                                             see Apple Co. CoreFoundation source */
 #endif
 
-#define _CFG_GCD_OVERCOMMIT         0   /* allow overcommit GCD queue beyond of the number CPU cores */
+#ifndef _PMR_GCD_OVERCOMMIT
+#define _PMR_GCD_OVERCOMMIT         0   /* allow overcommit GCD queue beyond of the number CPU cores */
+#endif
 
-#define _CFG_PARALLEL_MAY_SPAWN     1 && (CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS || CFG_PARALLEL_USE_OMP)
-                                                    /* allow symmerge to spawn nested threads */
+#ifndef _PMR_PARALLEL_MAY_SPAWN
+#define _PMR_PARALLEL_MAY_SPAWN     (PMR_PARALLEL_USE_GCD || PMR_PARALLEL_USE_PTHREADS || PMR_PARALLEL_USE_OMP)
+                                                    /* allow [sym]merge to spawn nested threads */
+#endif
 
-#define _CFG_PRESORT                binsort_run     /* method of pre-sort for initial subsegments,
+/* -------------------------------------------------------------------------------------------------------------------------- */
+/* some more useless fine tunings */
+/* -------------------------------------------------------------------------------------------------------------------------- */
+
+#define _PMR_PRESORT                binsort_run     /* method of pre-sort for initial subsegments,
                                                         allowed: binsort, binsort_run, and binsort_mergerun */
 
-#define _CFG_USE_4_MEM              1 && CFG_RAW_ACCESS /* use dedicated int32 type memory ops */
-#define _CFG_USE_8_MEM              1 && CFG_RAW_ACCESS /* use dedicated int64 type memory ops */
-#define _CFG_USE_16_MEM             1 && CFG_RAW_ACCESS /* use dedicated int128 type memory ops */
+#define _PMR_USE_4_MEM              PMR_RAW_ACCESS /* use dedicated int32 type memory ops */
+#define _PMR_USE_8_MEM              PMR_RAW_ACCESS /* use dedicated int64 type memory ops */
+#define _PMR_USE_16_MEM             PMR_RAW_ACCESS /* use dedicated int128 type memory ops */
 
-#define _CFG_RAW_ACCESS_ALIGNED     0   /* enable aligned raw memory access */
+#define _PMR_TMP_ROT                8   /* max. temp. elements at stack on rotate */
 
-#define _CFG_TMP_ROT                8   /* max. temp. elements at stack on rotate */
-
-#define _CFG_MIN_SUBMERGELEN1       8   /* threshold to fallback from inplace symmerge to inplace merge
+#define _PMR_MIN_SUBMERGELEN1       8   /* threshold to fallback from inplace [sym]merge to inplace merge
                                             for short left/right segment */
-#define _CFG_MIN_SUBMERGELEN2       4   /* threshold to fallback from binary to linear search
+#define _PMR_MIN_SUBMERGELEN2       4   /* threshold to fallback from binary to linear search
                                             for short left/right segment merging */
 
-#define _CFG_BLOCKLEN_MTHRESHOLD0   16
-#define _CFG_BLOCKLEN_MTHRESHOLD    16
-#define _CFG_BLOCKLEN_SYMMERGE      32  /* 20 was as in built-in GO language function */
-#define _CFG_BLOCKLEN_MERGE         32
+#define _PMR_BLOCKLEN_MTHRESHOLD0   16
+#define _PMR_BLOCKLEN_MTHRESHOLD    16
+#define _PMR_BLOCKLEN_SYMMERGE      32  /* 20 was as in built-in GO language function */
+#define _PMR_BLOCKLEN_MERGE         32
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
 typedef struct thr_pool thr_pool_t;
 
-#if CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS || CFG_PARALLEL_USE_OMP
+#if PMR_PARALLEL_USE_GCD || PMR_PARALLEL_USE_PTHREADS || PMR_PARALLEL_USE_OMP
 
 #ifdef __APPLE__
 #include <sys/sysctl.h>
@@ -132,7 +162,7 @@ typedef struct thr_pool thr_pool_t;
 
 static int32_t _ncpu = -1;
 
-#if CFG_CORE_PROFILE
+#if _PMR_CORE_PROFILE
 /*
  * override number of CPU for benchmark purposes
  * (may have sense for GCD at the moment)
@@ -143,10 +173,10 @@ void pmergesort_nCPU(int32_t ncpu)
 }
 #endif
 
-#if CFG_PARALLEL_USE_PTHREADS
-#define _CFG_ONCE_ARG   void
-#elif CFG_PARALLEL_USE_GCD
-#define _CFG_ONCE_ARG   void * ctx
+#if PMR_PARALLEL_USE_PTHREADS
+#define _PMR_ONCE_ARG   void
+#elif PMR_PARALLEL_USE_GCD
+#define _PMR_ONCE_ARG   void * ctx
 #endif
 
 /*
@@ -173,15 +203,15 @@ static __attribute__((noinline)) size_t cutOff(size_t n)
     s = (s + n / s) >> 1;
     s = (s + n / s) >> 1;
 
-#if CFG_PARALLEL_USE_PTHREADS
+#if PMR_PARALLEL_USE_PTHREADS
     return s << 4;
-#elif CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_OMP
+#elif PMR_PARALLEL_USE_GCD || PMR_PARALLEL_USE_OMP
     return s << 2;
 #endif
 }
 
-#if !CFG_PARALLEL_USE_OMP
-static void __numCPU_initialize(_CFG_ONCE_ARG)
+#if !PMR_PARALLEL_USE_OMP
+static void __numCPU_initialize(_PMR_ONCE_ARG)
 {
 #ifdef __APPLE__
     int32_t mib[] = { CTL_HW, HW_AVAILCPU };
@@ -211,10 +241,10 @@ static void __numCPU_initialize(_CFG_ONCE_ARG)
         _ncpu = (int32_t)ncpu;
 #endif
 }
-#endif /* CFG_PARALLEL_USE_OMP */
+#endif /* PMR_PARALLEL_USE_OMP */
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
-#if CFG_PARALLEL_USE_PTHREADS
+#if PMR_PARALLEL_USE_PTHREADS
 /* -------------------------------------------------------------------------------------------------------------------------- */
 #include "pmergesort-tpool.inl"
 /* -------------------------------------------------------------------------------------------------------------------------- */
@@ -267,17 +297,23 @@ static pthread_once_t _once = PTHREAD_ONCE_INIT;
 }
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
-#elif CFG_PARALLEL_USE_GCD
+#elif PMR_PARALLEL_USE_GCD
 /* -------------------------------------------------------------------------------------------------------------------------- */
+
+#ifdef __INTEL_COMPILER
+// Intel compiler __builtin_assume "hack"
+#define __builtin_assume(c) __assume(c)
+#endif
+
 #include <dispatch/dispatch.h>
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
 struct thr_pool
 {
     dispatch_queue_t        queue;
-#if _CFG_PARALLEL_MAY_SPAWN
+#if _PMR_PARALLEL_MAY_SPAWN
     dispatch_group_t        group;
-#if !_CFG_GCD_OVERCOMMIT
+#if !_PMR_GCD_OVERCOMMIT
     dispatch_semaphore_t    mutex; /* semaphore to prevent the threads overcommit flood */
 #endif
 #endif
@@ -290,7 +326,7 @@ struct thr_pool
 #define DISPATCH_OBJECT_T(o) (o)
 #endif
 
-#if _CFG_QUEUE_OVERCOMMIT
+#if _PMR_QUEUE_OVERCOMMIT
 /*!
  * @enum dispatch_queue_flags_t
  *
@@ -303,9 +339,9 @@ enum
     DISPATCH_QUEUE_OVERCOMMIT = 0x2ULL
 };
 
-#define _CFG_DISPATCH_QUEUE_FLAGS   DISPATCH_QUEUE_OVERCOMMIT
+#define _PMR_DISPATCH_QUEUE_FLAGS   DISPATCH_QUEUE_OVERCOMMIT
 #else
-#define _CFG_DISPATCH_QUEUE_FLAGS   0
+#define _PMR_DISPATCH_QUEUE_FLAGS   0
 #endif
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
@@ -323,7 +359,7 @@ static dispatch_once_t _once;
 #define thPool()    ((thr_pool_t *)0)
 /* -------------------------------------------------------------------------------------------------------------------------- */
 /* -------------------------------------------------------------------------------------------------------------------------- */
-#elif CFG_PARALLEL_USE_OMP
+#elif PMR_PARALLEL_USE_OMP
 /* -------------------------------------------------------------------------------------------------------------------------- */
 #include <omp.h>
 /* -------------------------------------------------------------------------------------------------------------------------- */
@@ -347,12 +383,12 @@ static inline int numCPU()
 #define thPool()    ((thr_pool_t *)0)
 /* -------------------------------------------------------------------------------------------------------------------------- */
 /* -------------------------------------------------------------------------------------------------------------------------- */
-#endif /* CFG_PARALLEL_USE_PTHREADS */
+#endif /* PMR_PARALLEL_USE_PTHREADS */
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#else /* CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS || CFG_PARALLEL_USE_OMP */
+#else /* PMR_PARALLEL_USE_GCD || PMR_PARALLEL_USE_PTHREADS || PMR_PARALLEL_USE_OMP */
 
-#if CFG_CORE_PROFILE
+#if _PMR_CORE_PROFILE
 void pmergesort_nCPU(int32_t ncpu)
 {
     /* stub */
@@ -365,7 +401,7 @@ void pmergesort_nCPU(int32_t ncpu)
 #define cutOff(n)   (0)
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#endif /* CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS */
+#endif /* PMR_PARALLEL_USE_GCD || PMR_PARALLEL_USE_PTHREADS */
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
@@ -406,7 +442,7 @@ struct _context
     const int       ncpu;           /* number of CPU cores              */
     thr_pool_t *    thpool;         /* thread pool (for pthread model)  */
 
-    /* symmerge parallel */
+    /* [sym]merge parallel */
 
     size_t          npercpu;        /* number of elements per CPU       */
     size_t          bsize;          /* initial block size               */
@@ -414,13 +450,13 @@ struct _context
     effector_t      sort_effector;  /* effector to pre-sort blocks      */
     effector_t      merge_effector; /* effector to merge blocks         */
 
-    /* symmerge parallel wrapper */
+    /* [sym]merge parallel wrapper */
 
     const void *    wsort;          /* sort function to wrap            */
 };
 typedef struct _context context_t;
 
-#if CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS
+#if PMR_PARALLEL_USE_GCD || PMR_PARALLEL_USE_PTHREADS
 struct _pmergesort_pass_context
 {
     context_t *     ctx;
@@ -430,7 +466,7 @@ struct _pmergesort_pass_context
 
     size_t          chunksz;
     size_t          numchunks;
-#if CFG_PARALLEL_USE_PTHREADS
+#if PMR_PARALLEL_USE_PTHREADS
     size_t          chunk;      /* index of chunk (for pthread model)   */
 #endif
 
@@ -450,23 +486,14 @@ typedef struct _pmergesort_pass_context pmergesort_pass_context_t;
 /* memory accessors                                                                                                           */
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#if !CFG_RAW_ACCESS
-#if !CFG_AGNER_ACCESS
-#define T_MEMCPY(d,s,n)     memcpy((d),(s),(n))
-#define T_MEMMOVE(d,s,n)    memmove((d),(s),(n))
-#else
-#include "asmlib.h"
-#define T_MEMCPY(d,s,n)     A_memcpy((d),(s),(n))
-#define T_MEMMOVE(d,s,n)    A_memmove((d),(s),(n))
-#endif
-#else
+#if PMR_RAW_ACCESS
 #if __LP64__
 #define T_WORD  uint64_t
 #else
 #define T_WORD  uint32_t
 #endif
 
-#if _CFG_RAW_ACCESS_ALIGNED
+#if PMR_RAW_ACCESS_ALIGNED
 #define T_MASK  (sizeof(T_WORD) - 1)
 #endif
 
@@ -477,16 +504,16 @@ union _ptr
     uintptr_t   uint;
 };
 typedef union _ptr ptr_t;
-#endif /* !CFG_RAW_ACCESS */
+#endif /* !PMR_RAW_ACCESS */
 
 static inline void _regions_swap(void * a, void * b, size_t sz)
 {
-#if CFG_RAW_ACCESS
+#if PMR_RAW_ACCESS
 
     ptr_t p = { a };
     ptr_t q = { b };
 
-#if _CFG_RAW_ACCESS_ALIGNED
+#if PMR_RAW_ACCESS_ALIGNED
     size_t hsz = p.uint & T_MASK;
     if (hsz == (q.uint & T_MASK))
 #endif
@@ -497,7 +524,7 @@ static inline void _regions_swap(void * a, void * b, size_t sz)
 
         uint8_t tbyte;
 
-#if _CFG_RAW_ACCESS_ALIGNED
+#if PMR_RAW_ACCESS_ALIGNED
         switch (hsz)
         {
 #if __LP64__
@@ -515,7 +542,7 @@ static inline void _regions_swap(void * a, void * b, size_t sz)
             /* should never happen */
             break;
         }
-#endif /* _CFG_RAW_ACCESS_ALIGNED */
+#endif /* PMR_RAW_ACCESS_ALIGNED */
 
         /* words */
 
@@ -547,7 +574,7 @@ static inline void _regions_swap(void * a, void * b, size_t sz)
             break;
         }
     }
-#if _CFG_RAW_ACCESS_ALIGNED
+#if PMR_RAW_ACCESS_ALIGNED
     else
     {
         /* regions unaligned */
@@ -560,7 +587,7 @@ static inline void _regions_swap(void * a, void * b, size_t sz)
             sz--;
         }
     }
-#endif /* _CFG_RAW_ACCESS_ALIGNED */
+#endif /* PMR_RAW_ACCESS_ALIGNED */
 
 #else
 
@@ -570,9 +597,9 @@ static inline void _regions_swap(void * a, void * b, size_t sz)
 
     while (sz >= sizeof(t))
     {
-        T_MEMCPY(t, p, sizeof(t));
-        T_MEMCPY(p, q, sizeof(t));
-        T_MEMCPY(q, t, sizeof(t));
+        PMR_MEMCPY(t, p, sizeof(t));
+        PMR_MEMCPY(p, q, sizeof(t));
+        PMR_MEMCPY(q, t, sizeof(t));
 
         p += sizeof(t);
         q += sizeof(t);
@@ -581,9 +608,9 @@ static inline void _regions_swap(void * a, void * b, size_t sz)
 
     if (sz > 0)
     {
-        T_MEMCPY(t, p, sz);
-        T_MEMCPY(p, q, sz);
-        T_MEMCPY(q, t, sz);
+        PMR_MEMCPY(t, p, sz);
+        PMR_MEMCPY(p, q, sz);
+        PMR_MEMCPY(q, t, sz);
     }
 
 #endif
@@ -591,14 +618,14 @@ static inline void _regions_swap(void * a, void * b, size_t sz)
 
 static inline void _region_copy(void * src, void * dst, size_t sz)
 {
-#if CFG_RAW_ACCESS
+#if PMR_RAW_ACCESS
 
     ptr_t p = { src };
     ptr_t q = { dst };
 
     /* copy forward */
 
-#if _CFG_RAW_ACCESS_ALIGNED
+#if PMR_RAW_ACCESS_ALIGNED
     size_t hsz = p.uint & T_MASK;
     if (hsz == (q.uint & T_MASK))
 #endif
@@ -607,7 +634,7 @@ static inline void _region_copy(void * src, void * dst, size_t sz)
 
         /* head */
 
-#if _CFG_RAW_ACCESS_ALIGNED
+#if PMR_RAW_ACCESS_ALIGNED
         switch (hsz)
         {
 #if __LP64__
@@ -625,7 +652,7 @@ static inline void _region_copy(void * src, void * dst, size_t sz)
             /* should never happen */
             break;
         }
-#endif /* _CFG_RAW_ACCESS_ALIGNED */
+#endif /* PMR_RAW_ACCESS_ALIGNED */
 
         /* words */
 
@@ -655,7 +682,7 @@ static inline void _region_copy(void * src, void * dst, size_t sz)
             break;
         }
     }
-#if _CFG_RAW_ACCESS_ALIGNED
+#if PMR_RAW_ACCESS_ALIGNED
     else
     {
         /* regions unaligned */
@@ -666,25 +693,25 @@ static inline void _region_copy(void * src, void * dst, size_t sz)
             sz--;
         }
     }
-#endif /* _CFG_RAW_ACCESS_ALIGNED */
+#endif /* PMR_RAW_ACCESS_ALIGNED */
 
 #else
 
-    T_MEMCPY(dst, src, sz);
+    PMR_MEMCPY(dst, src, sz);
 
 #endif
 }
 
 static inline void _region_move_right(void * src, void * dst, size_t sz)
 {
-#if CFG_RAW_ACCESS
+#if PMR_RAW_ACCESS
 
     ptr_t p = { src };
     ptr_t q = { dst };
 
     /* copy backward */
 
-#if _CFG_RAW_ACCESS_ALIGNED
+#if PMR_RAW_ACCESS_ALIGNED
     size_t hsz = p.uint & T_MASK;
     if (hsz == (q.uint & T_MASK))
 #endif
@@ -696,7 +723,7 @@ static inline void _region_move_right(void * src, void * dst, size_t sz)
         p.uint += sz;
         q.uint += sz;
 
-#if _CFG_RAW_ACCESS_ALIGNED
+#if PMR_RAW_ACCESS_ALIGNED
         size_t tsz = (sz - hsz) & T_MASK;
         switch (tsz)
         {
@@ -715,7 +742,7 @@ static inline void _region_move_right(void * src, void * dst, size_t sz)
             /* should never happen */
             break;
         }
-#endif /* _CFG_RAW_ACCESS_ALIGNED */
+#endif /* PMR_RAW_ACCESS_ALIGNED */
 
         /* words */
 
@@ -745,7 +772,7 @@ static inline void _region_move_right(void * src, void * dst, size_t sz)
             break;
         }
     }
-#if _CFG_RAW_ACCESS_ALIGNED
+#if PMR_RAW_ACCESS_ALIGNED
     else
     {
         /* regions unaligned */
@@ -759,30 +786,30 @@ static inline void _region_move_right(void * src, void * dst, size_t sz)
             sz--;
         }
     }
-#endif /* _CFG_RAW_ACCESS_ALIGNED */
+#endif /* PMR_RAW_ACCESS_ALIGNED */
 
 #else
 
-    T_MEMMOVE(dst, src, sz);
+    PMR_MEMMOVE(dst, src, sz);
 
 #endif
 }
 
 static inline void _region_move_left(void * src, void * dst, size_t sz)
 {
-#if CFG_RAW_ACCESS
+#if PMR_RAW_ACCESS
 
     _region_copy(src, dst, sz);
 
 #else
 
-    T_MEMMOVE(dst, src, sz);
+    PMR_MEMMOVE(dst, src, sz);
 
 #endif
 }
 
-#if CFG_RAW_ACCESS
-#if _CFG_RAW_ACCESS_ALIGNED
+#if PMR_RAW_ACCESS
+#if PMR_RAW_ACCESS_ALIGNED
 #undef T_MASK
 #endif
 #undef T_WORD
@@ -797,7 +824,7 @@ static inline void * _aux_alloc(aux_t * aux, size_t sz)
     void * tmp = aux->temp;
     if (tmp == NULL || aux->sz < sz)
     {
-        tmp = realloc(tmp, sz);
+        tmp = PMR_REALLOC(tmp, sz);
         if (tmp == NULL)
         {
             aux->rc = 1; /* FIXME: atomic */
@@ -816,7 +843,7 @@ static inline void _aux_free(aux_t * aux)
 {
     if (aux->temp != NULL)
     {
-        free(aux->temp);
+        PMR_FREE(aux->temp);
         aux->temp = NULL;
     }
 }
@@ -842,7 +869,7 @@ static inline void _aux_free(aux_t * aux)
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#if _CFG_USE_4_MEM
+#if _PMR_USE_4_MEM
 
 #define SORT_SUFFIX                 4
 
@@ -868,7 +895,7 @@ static inline void _aux_free(aux_t * aux)
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#if _CFG_USE_8_MEM
+#if _PMR_USE_8_MEM
 
 #define SORT_SUFFIX                 8
 
@@ -898,7 +925,7 @@ static inline void _aux_free(aux_t * aux)
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#if _CFG_USE_16_MEM
+#if _PMR_USE_16_MEM
 
 #define SORT_SUFFIX                 16
 
@@ -980,7 +1007,7 @@ int wrapmergesort(void * base, size_t n, size_t sz, int (*cmp)(const void *, con
     return _F(wrapmergesort)(&ctx);
 }
 
-#if CFG_CORE_PROFILE
+#if _PMR_CORE_PROFILE
 void insertionsort(void * base, size_t n, size_t sz, int (*cmp)(const void *, const void *))
 {
     if (n < 2) /* have nothing to sort */
@@ -992,7 +1019,7 @@ void insertionsort(void * base, size_t n, size_t sz, int (*cmp)(const void *, co
 }
 #endif
 
-#if CFG_CORE_PROFILE
+#if _PMR_CORE_PROFILE
 void insertionsort_run(void * base, size_t n, size_t sz, int (*cmp)(const void *, const void *))
 {
     if (n < 2) /* have nothing to sort */
@@ -1004,7 +1031,7 @@ void insertionsort_run(void * base, size_t n, size_t sz, int (*cmp)(const void *
 }
 #endif
 
-#if CFG_CORE_PROFILE
+#if _PMR_CORE_PROFILE
 void insertionsort_mergerun(void * base, size_t n, size_t sz, int (*cmp)(const void *, const void *))
 {
     if (n < 2) /* have nothing to sort */

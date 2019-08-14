@@ -93,7 +93,7 @@ static inline void _(inplace_merge_r2l)(void * lo, void * mi, void * hi, context
         /* left segment size */
         size_t llen = ELT_DIST(ctx, mi, lo);
 
-        if (llen < _CFG_MIN_SUBMERGELEN2)
+        if (llen < _PMR_MIN_SUBMERGELEN2)
         {
             /* linear search */
             ins = mi;
@@ -121,7 +121,7 @@ static inline void _(inplace_merge_r2l)(void * lo, void * mi, void * hi, context
         size_t rlen = len - llen;
 
         void * nmi;
-        if (rlen < _CFG_MIN_SUBMERGELEN2)
+        if (rlen < _PMR_MIN_SUBMERGELEN2)
         {
             /* linear search */
             nmi = ELT_PTR_NEXT(ctx, mi);
@@ -139,7 +139,7 @@ static inline void _(inplace_merge_r2l)(void * lo, void * mi, void * hi, context
             nmi = _(ip)(ins, mi, hi, 0, ctx);
         }
 
-        /* place subsegment at place (rotate is already _CFG_TMP_ROT aware and detects direction) */
+        /* place subsegment at place (rotate is already _PMR_TMP_ROT aware and detects direction) */
 
         _M(rotate)(ins, mi, nmi, sz);
 
@@ -180,7 +180,7 @@ static inline void _(inplace_merge_l2r)(void * lo, void * mi, void * hi, context
         /* right segment size */
         size_t rlen = ELT_DIST(ctx, hi, mi);
 
-        if (rlen < _CFG_MIN_SUBMERGELEN2)
+        if (rlen < _PMR_MIN_SUBMERGELEN2)
         {
             /* linear search */
             ins = mi;
@@ -208,7 +208,7 @@ static inline void _(inplace_merge_l2r)(void * lo, void * mi, void * hi, context
         /* left segment size */
         size_t llen = len - rlen;
 
-        if (llen < _CFG_MIN_SUBMERGELEN2)
+        if (llen < _PMR_MIN_SUBMERGELEN2)
         {
             /* linear search */
             while (lo < pmi)
@@ -226,7 +226,7 @@ static inline void _(inplace_merge_l2r)(void * lo, void * mi, void * hi, context
             pmi = _(ip)(pins, lo, pmi, -1, ctx);
         }
 
-        /* place subsegment at place (rotate is already _CFG_TMP_ROT aware and detects direction) */
+        /* place subsegment at place (rotate is already _PMR_TMP_ROT aware and detects direction) */
 
         _M(rotate)(pmi, mi, ins, sz);
 
@@ -257,12 +257,12 @@ static inline void _(inplace_merge)(void * lo, void * mi, void * hi, context_t *
 /* -------------------------------------------------------------------------------------------------------------------------- */
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#if (CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS) && _CFG_PARALLEL_MAY_SPAWN
+#if (PMR_PARALLEL_USE_GCD || PMR_PARALLEL_USE_PTHREADS) && _PMR_PARALLEL_MAY_SPAWN
 /* -------------------------------------------------------------------------------------------------------------------------- */
 /*  unified core of parallel symmerge                                                                                        */
 /* -------------------------------------------------------------------------------------------------------------------------- */
 static
-#if CFG_PARALLEL_USE_PTHREADS
+#if PMR_PARALLEL_USE_PTHREADS
 inline
 #endif
 void _(merge_spawn_pass)(void * arg)
@@ -272,7 +272,7 @@ void _(merge_spawn_pass)(void * arg)
 
     if (aux->rc == 0)
     {
-#if CFG_PARALLEL_USE_GCD && !_CFG_GCD_OVERCOMMIT
+#if PMR_PARALLEL_USE_GCD && !_PMR_GCD_OVERCOMMIT
         dispatch_semaphore_wait(pass_ctx->ctx->thpool->mutex, DISPATCH_TIME_FOREVER); /* semaphore to prevent the threads overcommit flood */
 #endif
 
@@ -288,15 +288,15 @@ void _(merge_spawn_pass)(void * arg)
 
         _aux_free(&laux);
 
-#if CFG_PARALLEL_USE_GCD && !_CFG_GCD_OVERCOMMIT
+#if PMR_PARALLEL_USE_GCD && !_PMR_GCD_OVERCOMMIT
         dispatch_semaphore_signal(pass_ctx->ctx->thpool->mutex); /* report processed */
 #endif
     }
 
-    free(arg); /* clean self */
+    PMR_FREE(arg); /* clean self */
 }
 
-#if CFG_PARALLEL_USE_PTHREADS
+#if PMR_PARALLEL_USE_PTHREADS
 static void * _(merge_spawn_pass_ex)(void * arg)
 {
     _(merge_spawn_pass)(arg);
@@ -304,7 +304,7 @@ static void * _(merge_spawn_pass_ex)(void * arg)
     return NULL;
 }
 #endif
-#endif /* (CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS) && _CFG_PARALLEL_MAY_SPAWN */
+#endif /* (PMR_PARALLEL_USE_GCD || PMR_PARALLEL_USE_PTHREADS) && _PMR_PARALLEL_MAY_SPAWN */
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 /*  inplace merge two sorted segments of the vary sizes and keep resulting segment sorted                                     */
@@ -326,7 +326,7 @@ static void _(inplace_symmerge)(void * lo, void * mi, void * hi, context_t * ctx
         size_t llen = ELT_DIST(ctx, mi, lo);
 
         /* fallback to linear merge for short segment at left */
-        if (llen < _CFG_MIN_SUBMERGELEN1)
+        if (llen < _PMR_MIN_SUBMERGELEN1)
         {
             _(inplace_merge_l2r)(lo, mi, hi, ctx);
             break; /* we're done */
@@ -339,7 +339,7 @@ static void _(inplace_symmerge)(void * lo, void * mi, void * hi, context_t * ctx
         size_t rlen = len - llen;
 
         /* fallback to linear merge for short segment at right */
-        if (rlen < _CFG_MIN_SUBMERGELEN1)
+        if (rlen < _PMR_MIN_SUBMERGELEN1)
         {
             _(inplace_merge_r2l)(lo, mi, hi, ctx);
             break; /* we're done */
@@ -374,11 +374,11 @@ static void _(inplace_symmerge)(void * lo, void * mi, void * hi, context_t * ctx
 
         if (lo < start && start < mid)
         {
-#if _CFG_PARALLEL_MAY_SPAWN
-#if CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS
+#if _PMR_PARALLEL_MAY_SPAWN
+#if PMR_PARALLEL_USE_GCD || PMR_PARALLEL_USE_PTHREADS
             if (ctx->thpool != NULL && len > ctx->cut_off)
             {
-                pmergesort_pass_context_t * pass_ctx = malloc(sizeof(pmergesort_pass_context_t));
+                pmergesort_pass_context_t * pass_ctx = PMR_MALLOC(sizeof(pmergesort_pass_context_t));
                 pass_ctx->ctx = ctx;
                 pass_ctx->bsz = 0;
                 pass_ctx->dbl_bsz = 0;
@@ -390,21 +390,21 @@ static void _(inplace_symmerge)(void * lo, void * mi, void * hi, context_t * ctx
                 pass_ctx->effector = ctx->merge_effector;
                 pass_ctx->auxes = aux->parent;
 
-#if CFG_PARALLEL_USE_PTHREADS
+#if PMR_PARALLEL_USE_PTHREADS
                 thr_pool_queue(ctx->thpool, _(merge_spawn_pass_ex), pass_ctx);
-#elif CFG_PARALLEL_USE_GCD
+#elif PMR_PARALLEL_USE_GCD
                 dispatch_group_async_f(ctx->thpool->group, ctx->thpool->queue, pass_ctx, _(merge_spawn_pass));
 #endif
             }
             else
                 _(inplace_symmerge)(lo, start, mid, ctx, aux);
-#elif CFG_PARALLEL_USE_OMP
+#elif PMR_PARALLEL_USE_OMP
             #pragma omp task if (len > ctx->cut_off) default(none) firstprivate(lo, start, mid, ctx)
             _(inplace_symmerge)(lo, start, mid, ctx, NULL);
-#endif /* CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS */
+#endif /* PMR_PARALLEL_USE_GCD || PMR_PARALLEL_USE_PTHREADS */
 #else
             _(inplace_symmerge)(lo, start, mid, ctx, NULL);
-#endif /* _CFG_PARALLEL_MAY_SPAWN */
+#endif /* _PMR_PARALLEL_MAY_SPAWN */
         }
 
         /* merge the 2nd subsegments [mid, end) & [end, hi) here instead of
@@ -432,7 +432,7 @@ static void _(inplace_symmerge)(void * lo, void * mi, void * hi, context_t * ctx
 /* -------------------------------------------------------------------------------------------------------------------------- */
 static __attribute__((unused)) void _(aux_symmerge)(void * lo, void * mi, void * hi, context_t * ctx, aux_t * aux)
 {
-#if CFG_PARALLEL_USE_OMP
+#if PMR_PARALLEL_USE_OMP
     aux_t * paux = aux->parent;
 #endif
 
@@ -444,7 +444,7 @@ static __attribute__((unused)) void _(aux_symmerge)(void * lo, void * mi, void *
         size_t llen = ELT_DIST(ctx, mi, lo);
 
         /* fallback to linear merge for short segment at left */
-        if (llen < _CFG_MIN_SUBMERGELEN1)
+        if (llen < _PMR_MIN_SUBMERGELEN1)
         {
             _(inplace_merge_l2r)(lo, mi, hi, ctx);
             break; /* we're done */
@@ -457,7 +457,7 @@ static __attribute__((unused)) void _(aux_symmerge)(void * lo, void * mi, void *
         size_t rlen = len - llen;
 
         /* fallback to linear merge for short segment at right */
-        if (rlen < _CFG_MIN_SUBMERGELEN1)
+        if (rlen < _PMR_MIN_SUBMERGELEN1)
         {
             _(inplace_merge_r2l)(lo, mi, hi, ctx);
             break; /* we're done */
@@ -494,11 +494,11 @@ static __attribute__((unused)) void _(aux_symmerge)(void * lo, void * mi, void *
 
         if (lo < start && start < mid)
         {
-#if _CFG_PARALLEL_MAY_SPAWN
-#if CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS
+#if _PMR_PARALLEL_MAY_SPAWN
+#if PMR_PARALLEL_USE_GCD || PMR_PARALLEL_USE_PTHREADS
             if (ctx->thpool != NULL && len > ctx->cut_off)
             {
-                pmergesort_pass_context_t * pass_ctx = malloc(sizeof(pmergesort_pass_context_t));
+                pmergesort_pass_context_t * pass_ctx = PMR_MALLOC(sizeof(pmergesort_pass_context_t));
                 pass_ctx->ctx = ctx;
                 pass_ctx->bsz = 0;
                 pass_ctx->dbl_bsz = 0;
@@ -510,9 +510,9 @@ static __attribute__((unused)) void _(aux_symmerge)(void * lo, void * mi, void *
                 pass_ctx->effector = ctx->merge_effector;
                 pass_ctx->auxes = aux->parent;
 
-#if CFG_PARALLEL_USE_PTHREADS
+#if PMR_PARALLEL_USE_PTHREADS
                 thr_pool_queue(ctx->thpool, _(merge_spawn_pass_ex), pass_ctx);
-#elif CFG_PARALLEL_USE_GCD
+#elif PMR_PARALLEL_USE_GCD
                 dispatch_group_async_f(ctx->thpool->group, ctx->thpool->queue, pass_ctx, _(merge_spawn_pass));
 #endif
             }
@@ -523,7 +523,7 @@ static __attribute__((unused)) void _(aux_symmerge)(void * lo, void * mi, void *
                 if (aux->rc != 0)
                     break; /* bail out */
             }
-#elif CFG_PARALLEL_USE_OMP
+#elif PMR_PARALLEL_USE_OMP
             #pragma omp task if (len > ctx->cut_off) default(none) firstprivate(lo, start, mid, ctx, paux)
             if (paux->rc == 0)
             {
@@ -539,13 +539,13 @@ static __attribute__((unused)) void _(aux_symmerge)(void * lo, void * mi, void *
 
                 _aux_free(&laux);
             }
-#endif /* CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS */
+#endif /* PMR_PARALLEL_USE_GCD || PMR_PARALLEL_USE_PTHREADS */
 #else
             _(aux_symmerge)(lo, start, mid, ctx, aux);
 
             if (aux->rc != 0)
                 break; /* bail out */
-#endif /* _CFG_PARALLEL_MAY_SPAWN */
+#endif /* _PMR_PARALLEL_MAY_SPAWN */
         }
 
         /* merge the 2nd subsegments [mid, end) & [end, hi) here instead of
@@ -576,7 +576,7 @@ static inline void _(aux_merge_r)(void * lo, void * mi, void * hi, context_t * c
     size_t rsz = ELT_DIST(ctx, hi, mi);
 
     /* fallback to linear merge for short segment at right */
-    if (rsz < _CFG_MIN_SUBMERGELEN1)
+    if (rsz < _PMR_MIN_SUBMERGELEN1)
     {
         _(inplace_merge_r2l)(lo, mi, hi, ctx);
         return; /* we're done */
@@ -640,7 +640,7 @@ static inline void _(aux_merge_l)(void * lo, void * mi, void * hi, context_t * c
     size_t lsz = ELT_DIST(ctx, mi, lo);
 
     /* fallback to linear merge for short segment at left */
-    if (lsz < _CFG_MIN_SUBMERGELEN1)
+    if (lsz < _PMR_MIN_SUBMERGELEN1)
     {
         _(inplace_merge_l2r)(lo, mi, hi, ctx);
         return; /* we're done */
@@ -827,7 +827,7 @@ static inline void _(binsort)(void * lo, void * mi, void * hi, context_t * ctx, 
 
         void * ins;
 
-        if (llen < _CFG_MIN_SUBMERGELEN2)
+        if (llen < _PMR_MIN_SUBMERGELEN2)
         {
             /* linear search */
             ins = mi;
@@ -898,12 +898,12 @@ static inline void _(binsort_mergerun)(void * lo, __unused void * mi, void * hi,
 /* -------------------------------------------------------------------------------------------------------------------------- */
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#if CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS
+#if PMR_PARALLEL_USE_GCD || PMR_PARALLEL_USE_PTHREADS
 /* -------------------------------------------------------------------------------------------------------------------------- */
 /*  unified core of parallel mergesort                                                                                        */
 /* -------------------------------------------------------------------------------------------------------------------------- */
 static
-#if CFG_PARALLEL_USE_PTHREADS
+#if PMR_PARALLEL_USE_PTHREADS
 inline
 #endif
 void _(sort_chunk_pass)(void * arg, size_t chunk)
@@ -932,14 +932,14 @@ void _(sort_chunk_pass)(void * arg, size_t chunk)
 }
 
 static
-#if CFG_PARALLEL_USE_PTHREADS
+#if PMR_PARALLEL_USE_PTHREADS
 inline
 #endif
 void _(merge_chunks_pass)(void * arg, size_t chunk)
 {
     pmergesort_pass_context_t * pass_ctx = arg;
 
-#if CFG_PARALLEL_USE_GCD && _CFG_PARALLEL_MAY_SPAWN && !_CFG_GCD_OVERCOMMIT
+#if PMR_PARALLEL_USE_GCD && _PMR_PARALLEL_MAY_SPAWN && !_PMR_GCD_OVERCOMMIT
     dispatch_semaphore_wait(pass_ctx->ctx->thpool->mutex, DISPATCH_TIME_FOREVER); /* semaphore to prevent the threads overcommit flood */
 #endif
 
@@ -964,12 +964,12 @@ void _(merge_chunks_pass)(void * arg, size_t chunk)
     if (last != 0 && aux->rc == 0)
         pass_ctx->effector(a, ELT_PTR_FWD(pass_ctx->ctx, a, pass_ctx->bsz), c, pass_ctx->ctx, aux);
 
-#if CFG_PARALLEL_USE_GCD && _CFG_PARALLEL_MAY_SPAWN && !_CFG_GCD_OVERCOMMIT
+#if PMR_PARALLEL_USE_GCD && _PMR_PARALLEL_MAY_SPAWN && !_PMR_GCD_OVERCOMMIT
     dispatch_semaphore_signal(pass_ctx->ctx->thpool->mutex); /* report processed */
 #endif
 }
 
-#if CFG_PARALLEL_USE_PTHREADS
+#if PMR_PARALLEL_USE_PTHREADS
 static void * _(sort_chunk_pass_ex)(void * arg)
 {
     _(sort_chunk_pass)(arg, ((pmergesort_pass_context_t *)arg)->chunk);
@@ -1096,7 +1096,7 @@ static inline int _(pmergesort_impl)(context_t * ctx)
             pass2_ctx_base.chunk = 0;
             _(merge_chunks_pass_ex)(&pass2_ctx_base);
 
-#if _CFG_PARALLEL_MAY_SPAWN
+#if _PMR_PARALLEL_MAY_SPAWN
             thr_pool_wait(ctx->thpool);
 #endif
         }
@@ -1117,19 +1117,19 @@ bail_out:;
 
     return rc;
 }
-#elif CFG_PARALLEL_USE_GCD
+#elif PMR_PARALLEL_USE_GCD
 /* -------------------------------------------------------------------------------------------------------------------------- */
 /*  unified core of parallel mergesort based on GCD                                                                           */
 /* -------------------------------------------------------------------------------------------------------------------------- */
 static inline int _(pmergesort_impl)(context_t * ctx)
 {
-    dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, _CFG_DISPATCH_QUEUE_FLAGS);
+    dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, _PMR_DISPATCH_QUEUE_FLAGS);
 
     thr_pool_t pool;
     pool.queue = queue;
-#if _CFG_PARALLEL_MAY_SPAWN
+#if _PMR_PARALLEL_MAY_SPAWN
     pool.group = NULL;
-#if !_CFG_GCD_OVERCOMMIT
+#if !_PMR_GCD_OVERCOMMIT
     pool.mutex = NULL;
 #endif
 #endif
@@ -1181,9 +1181,9 @@ static inline int _(pmergesort_impl)(context_t * ctx)
         }
     }
 
-#if _CFG_PARALLEL_MAY_SPAWN
+#if _PMR_PARALLEL_MAY_SPAWN
     pool.group = dispatch_group_create();
-#if !_CFG_GCD_OVERCOMMIT
+#if !_PMR_GCD_OVERCOMMIT
     pool.mutex = dispatch_semaphore_create(ctx->ncpu);
 #endif
 #endif
@@ -1219,7 +1219,7 @@ static inline int _(pmergesort_impl)(context_t * ctx)
 
                 dispatch_apply_f(numchunks, queue, &pass2_ctx, _(merge_chunks_pass));
 
-#if _CFG_PARALLEL_MAY_SPAWN
+#if _PMR_PARALLEL_MAY_SPAWN
                 dispatch_group_wait(pool.group, DISPATCH_TIME_FOREVER);
 #endif
 
@@ -1232,7 +1232,7 @@ static inline int _(pmergesort_impl)(context_t * ctx)
             else
             {
                 _(merge_chunks_pass)(&pass2_ctx, 0);
-#if _CFG_PARALLEL_MAY_SPAWN
+#if _PMR_PARALLEL_MAY_SPAWN
                 dispatch_group_wait(pool.group, DISPATCH_TIME_FOREVER);
 #endif
             }
@@ -1243,10 +1243,10 @@ static inline int _(pmergesort_impl)(context_t * ctx)
 
 bail_out:;
 
-#if _CFG_PARALLEL_MAY_SPAWN
+#if _PMR_PARALLEL_MAY_SPAWN
     if (pool.group != NULL)
         dispatch_release(DISPATCH_OBJECT_T(pool.group));
-#if !_CFG_GCD_OVERCOMMIT
+#if !_PMR_GCD_OVERCOMMIT
     if (pool.mutex != NULL)
         dispatch_release(DISPATCH_OBJECT_T(pool.mutex));
 #endif
@@ -1264,7 +1264,7 @@ bail_out:;
     return rc;
 }
 #endif
-#elif CFG_PARALLEL_USE_OMP
+#elif PMR_PARALLEL_USE_OMP
 /* -------------------------------------------------------------------------------------------------------------------------- */
 /*  unified core of parallel mergesort based on OpenMP                                                                        */
 /* -------------------------------------------------------------------------------------------------------------------------- */
@@ -1383,7 +1383,7 @@ bail_out:;
 
     return rc;
 }
-#endif /* CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS */
+#endif /* PMR_PARALLEL_USE_GCD || PMR_PARALLEL_USE_PTHREADS */
 
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
@@ -1393,31 +1393,31 @@ bail_out:;
 
 static inline void _(symmergesort)(context_t * ctx)
 {
-    if (ctx->n < _CFG_BLOCKLEN_MTHRESHOLD0 * _CFG_BLOCKLEN_SYMMERGE)
+    if (ctx->n < _PMR_BLOCKLEN_MTHRESHOLD0 * _PMR_BLOCKLEN_SYMMERGE)
     {
         void * lo = (void *)ctx->base;
         void * hi = ELT_PTR_FWD(ctx, lo, ctx->n);
 
-        _(_CFG_PRESORT)(lo, lo, hi, ctx, NULL);
+        _(_PMR_PRESORT)(lo, lo, hi, ctx, NULL);
 
         return;
     }
 
-#if CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS || CFG_PARALLEL_USE_OMP
+#if PMR_PARALLEL_USE_GCD || PMR_PARALLEL_USE_PTHREADS || PMR_PARALLEL_USE_OMP
     for (int ncpu = ctx->ncpu; ncpu > 1; ncpu--)
     {
         size_t npercpu = IDIV_UP(ctx->n, ncpu);
-        if (npercpu >= _CFG_BLOCKLEN_MTHRESHOLD * _CFG_BLOCKLEN_SYMMERGE)
+        if (npercpu >= _PMR_BLOCKLEN_MTHRESHOLD * _PMR_BLOCKLEN_SYMMERGE)
         {
             /* use parallel when have a long enough array could be distributed by cores */
 
             /* pre-set initial pass values */
             ctx->npercpu = npercpu;
-            ctx->bsize = _CFG_BLOCKLEN_SYMMERGE;
-            ctx->sort_effector = _(_CFG_PRESORT);
+            ctx->bsize = _PMR_BLOCKLEN_SYMMERGE;
+            ctx->sort_effector = _(_PMR_PRESORT);
             ctx->merge_effector = _(inplace_symmerge);
 
-#if CFG_PARALLEL_USE_OMP && _CFG_PARALLEL_MAY_SPAWN
+#if PMR_PARALLEL_USE_OMP && _PMR_PARALLEL_MAY_SPAWN
             thr_pool_t pool;
             pool.ncpu = ctx->ncpu; /* utilize maximum number of cores when symmerge spawns threads */
 
@@ -1432,27 +1432,27 @@ static inline void _(symmergesort)(context_t * ctx)
     }
 #endif
 
-#if (CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS) && _CFG_PARALLEL_MAY_SPAWN
+#if (PMR_PARALLEL_USE_GCD || PMR_PARALLEL_USE_PTHREADS) && _PMR_PARALLEL_MAY_SPAWN
     ctx->thpool = NULL; /* disable threads spawn */
 #endif
 
     void * lo = (void *)ctx->base;
     void * hi = ELT_PTR_FWD(ctx, lo, ctx->n);
 
-    size_t bsz = _CFG_BLOCKLEN_SYMMERGE;
+    size_t bsz = _PMR_BLOCKLEN_SYMMERGE;
 
     void * a = lo;
     void * b = ELT_PTR_FWD(ctx, a, bsz);
 
     while (b <= hi)
     {
-        _(_CFG_PRESORT)(a, a, b, ctx, NULL);
+        _(_PMR_PRESORT)(a, a, b, ctx, NULL);
 
         a = b;
         b = ELT_PTR_FWD(ctx, b, bsz);
     }
 
-    _(_CFG_PRESORT)(a, a, hi, ctx, NULL);
+    _(_PMR_PRESORT)(a, a, hi, ctx, NULL);
 
     while (bsz < ctx->n)
     {
@@ -1483,28 +1483,28 @@ static inline void _(symmergesort)(context_t * ctx)
 
 static inline int _(pmergesort)(context_t * ctx)
 {
-    if (ctx->n < _CFG_BLOCKLEN_MTHRESHOLD0 * _CFG_BLOCKLEN_SYMMERGE)
+    if (ctx->n < _PMR_BLOCKLEN_MTHRESHOLD0 * _PMR_BLOCKLEN_SYMMERGE)
     {
         void * lo = (void *)ctx->base;
         void * hi = ELT_PTR_FWD(ctx, lo, ctx->n);
 
-        _(_CFG_PRESORT)(lo, lo, hi, ctx, NULL);
+        _(_PMR_PRESORT)(lo, lo, hi, ctx, NULL);
 
         return 0;
     }
 
-#if CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS || CFG_PARALLEL_USE_OMP
+#if PMR_PARALLEL_USE_GCD || PMR_PARALLEL_USE_PTHREADS || PMR_PARALLEL_USE_OMP
     for (int ncpu = ctx->ncpu; ncpu > 1; ncpu--)
     {
         size_t npercpu = IDIV_UP(ctx->n, ncpu);
-        if (npercpu >= _CFG_BLOCKLEN_MTHRESHOLD * _CFG_BLOCKLEN_MERGE)
+        if (npercpu >= _PMR_BLOCKLEN_MTHRESHOLD * _PMR_BLOCKLEN_MERGE)
         {
             /* use parallel when have a long enough array could be distributed by cores */
 
             /* pre-set initial pass values */
             ctx->npercpu = npercpu;
-            ctx->bsize = _CFG_BLOCKLEN_MERGE;
-            ctx->sort_effector = _(_CFG_PRESORT);
+            ctx->bsize = _PMR_BLOCKLEN_MERGE;
+            ctx->sort_effector = _(_PMR_PRESORT);
             ctx->merge_effector = _(aux_merge);
 
             /* run parallel sort */
@@ -1513,27 +1513,27 @@ static inline int _(pmergesort)(context_t * ctx)
     }
 #endif
 
-#if (CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS) && _CFG_PARALLEL_MAY_SPAWN
+#if (PMR_PARALLEL_USE_GCD || PMR_PARALLEL_USE_PTHREADS) && _PMR_PARALLEL_MAY_SPAWN
     ctx->thpool = NULL; /* disable threads spawn */
 #endif
 
     void * lo = (void *)ctx->base;
     void * hi = ELT_PTR_FWD(ctx, lo, ctx->n);
 
-    size_t bsz = _CFG_BLOCKLEN_MERGE;
+    size_t bsz = _PMR_BLOCKLEN_MERGE;
 
     void * a = lo;
     void * b = ELT_PTR_FWD(ctx, a, bsz);
 
     while (b <= hi)
     {
-        _(_CFG_PRESORT)(a, a, b, ctx, NULL);
+        _(_PMR_PRESORT)(a, a, b, ctx, NULL);
 
         a = b;
         b = ELT_PTR_FWD(ctx, b, bsz);
     }
 
-    _(_CFG_PRESORT)(a, a, hi, ctx, NULL);
+    _(_PMR_PRESORT)(a, a, hi, ctx, NULL);
 
     aux_t aux;
     memset(&aux, 0, sizeof(aux));
@@ -1581,13 +1581,13 @@ static __attribute__((unused)) void _(wrap_sort)(void * lo, __unused void * mi, 
 
 static inline int _(wrapmergesort)(context_t * ctx)
 {
-#if CFG_PARALLEL_USE_GCD || CFG_PARALLEL_USE_PTHREADS || CFG_PARALLEL_USE_OMP
-    if (ctx->n >= 2 * _CFG_BLOCKLEN_MTHRESHOLD0 * _CFG_BLOCKLEN_SYMMERGE)
+#if PMR_PARALLEL_USE_GCD || PMR_PARALLEL_USE_PTHREADS || PMR_PARALLEL_USE_OMP
+    if (ctx->n >= 2 * _PMR_BLOCKLEN_MTHRESHOLD0 * _PMR_BLOCKLEN_SYMMERGE)
     {
         for (int ncpu = ctx->ncpu; ncpu > 1; ncpu--)
         {
             size_t npercpu = IDIV_UP(ctx->n, ncpu);
-            if (npercpu >= 2 * _CFG_BLOCKLEN_MTHRESHOLD * _CFG_BLOCKLEN_SYMMERGE)
+            if (npercpu >= 2 * _PMR_BLOCKLEN_MTHRESHOLD * _PMR_BLOCKLEN_SYMMERGE)
             {
                 /* use parallel when have a long enough array could be distributed by cores */
 
@@ -1597,7 +1597,7 @@ static inline int _(wrapmergesort)(context_t * ctx)
                 ctx->sort_effector = _(wrap_sort);
                 ctx->merge_effector = _(aux_symmerge);
 
-#if CFG_PARALLEL_USE_OMP && _CFG_PARALLEL_MAY_SPAWN
+#if PMR_PARALLEL_USE_OMP && _PMR_PARALLEL_MAY_SPAWN
                 thr_pool_t pool;
                 pool.ncpu = ctx->ncpu; /* utilize maximum number of cores when symmerge spawns threads */
 
@@ -1622,7 +1622,7 @@ static inline int _(wrapmergesort)(context_t * ctx)
 /*  low efficient inplace sorters for profiling purposes                                                                      */
 /* -------------------------------------------------------------------------------------------------------------------------- */
 
-#if CFG_CORE_PROFILE
+#if _PMR_CORE_PROFILE
 static inline void _(insertionsort)(context_t * ctx)
 {
     void * lo = (void *)ctx->base;
@@ -1632,7 +1632,7 @@ static inline void _(insertionsort)(context_t * ctx)
 }
 #endif
 
-#if CFG_CORE_PROFILE
+#if _PMR_CORE_PROFILE
 static inline void _(insertionsort_run)(context_t * ctx)
 {
     void * lo = (void *)ctx->base;
@@ -1642,7 +1642,7 @@ static inline void _(insertionsort_run)(context_t * ctx)
 }
 #endif
 
-#if CFG_CORE_PROFILE
+#if _PMR_CORE_PROFILE
 static inline void _(insertionsort_mergerun)(context_t * ctx)
 {
     void * lo = (void *)ctx->base;
