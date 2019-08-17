@@ -129,7 +129,9 @@ Future potential:
 
     clang -mmacosx-version-min=10.6 -c pmergesort.c -Ofast -o pmergesort.o
 
+
     pgcc -fast -O4 -Mipa=fast,inline,force -DMAC_OS_X_VERSION_MIN_REQUIRED=1060 -DTARGET_CPU_X86_64=1 -DTARGET_OS_MAC=1 -c pmergesort.c -o pmergesort.o
+
 
     icc -O3 -std=c99 -c pmergesort.c -o pmergesort.o
 
@@ -138,6 +140,7 @@ _TODO: makefile_
 ### PERFORMANCE
 
 Depends on CPU power/number of cores
+
 Ironically, on practice the single threaded **pmergesort** is faster and with twice lesser memory footprint than standard macOS **mergesort**
 
 Time complexity:
