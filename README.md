@@ -6,7 +6,7 @@ Parallel in-place/out-of-place merge sort algorithm implementations written in C
 
 The aim was to implement stable and performant parallel sort algorithm with the minimal memory footprint. The merge sort is used as the base since it’s highly adaptive to a parallel processing. In-place mergesort based on [SymMerge](https://dx.doi.org/10.1007%2F978-3-540-30140-0_63) algorithm from Kim Pok-Son and Arne Kutzner, "Stable Minimum Storage Merging by Symmetric Comparisons", in Susanne Albers and Tomasz Radzik, editors, Algorithms - ESA 2004, volume 3221 of Lecture Notes in Computer Science, pages 714-723. Springer, 2004.
 
-Current implementation is Mac OS X-centric, thus it uses [Apple GCD](https://en.wikipedia.org/wiki/Grand_Central_Dispatch) for multi-threading (if available), though it’s possible to use pthreads based multi-threading mechanism (basic Thread Pool implementation is included as well).
+Current implementation is macOS-centric, thus it uses [Apple GCD](https://en.wikipedia.org/wiki/Grand_Central_Dispatch) for multi-threading (if available), though it’s possible to use pthreads based multi-threading mechanism (basic Thread Pool implementation is included as well).
 
 ### INTERFACE (defined in pmergesort.h)
 
@@ -60,43 +60,65 @@ The prototype of reentrant **wrapmergesort\_r** has function declaration similar
 
 Configure algorithm parameters/settings using pre-processor directives (0 is ‘off’, 1 is ‘on’):
 
-* **CFG\_PARALLEL\_USE\_GCD**
-    * enable use of GCD for multi-threading, default is on
-* **CFG\_PARALLEL\_USE\_PTHREADS**
-    * enable use of pthreads based pool for multi-threading, default is off
+* **PMR\_PARALLEL\_USE\_GCD**
+    * enable use of GCD for multi-threading
+    * default is on
+* **PMR\_PARALLEL\_USE\_PTHREADS**
+    * enable use of pthreads based pool for multi-threading
+    * default is off
 * **CFG_PARALLEL\_USE\_OMP**
-    * enable use of OpenMP® for multi-threading (experimental), default is off
-* **CFG\_RAW\_ACCESS**
-    * enable raw memory access (faster, for unaligned memory blocks see **\_CFG\_RAW\_ACCESS\_ALIGNED**)
+    * enable use of OpenMP® for multi-threading (experimental)
+    * default is off
+* **PMR\_RAW\_ACCESS**
+    * enable raw memory access
     * off - implies the using of memmove and memcpy
     * on - use raw memory access
     * default is on
-* **CFG\_AGNER\_ACCESS**
-    * enable Agner Fog asmlib memory access, default is off, [http://www.agner.org/optimize/](http://www.agner.org/optimize/) (mostly as example of alternative memory management integration, do not expect performance improvement with it)
+* **PMR\_RAW\_ACCESS\_ALIGNED**
+    * enable aligned raw memory access
+    * default is off
 
-To enable the build of parallel merge sort algorithms set one of **CFG\_PARALLEL\_USE\_GCD**, **CFG\_PARALLEL\_USE\_PTHREADS**, or **CFG_PARALLEL\_USE\_OMP** on.
+To enable the build of parallel merge sort algorithms set one of **PMR\_PARALLEL\_USE\_GCD**, **PMR\_PARALLEL\_USE\_PTHREADS**, or **CFG_PARALLEL\_USE\_OMP** on.
 
-Algorithms fine tuning and tweaks using pre-processor directives:
+Configure intrinsic memory management and access overrides
 
-* **\_CFG\_QUEUE\_OVERCOMMIT**
-* **\_CFG\_GCD\_OVERCOMMIT**
-* **\_CFG\_PARALLEL\_MAY\_SPAWN**
-* **\_CFG\_PRESORT**
-* **\_CFG\_USE\_4\_MEM**
-* **\_CFG\_USE\_8\_MEM**
-* **\_CFG\_USE\_16\_MEM**
-* **\_CFG\_RAW\_ACCESS\_ALIGNED**
-* **\_CFG\_TMP\_ROT**
-* **\_CFG\_MIN\_SUBMERGELEN1**
-* **\_CFG\_MIN\_SUBMERGELEN2**
-* **\_CFG\_BLOCKLEN\_MTHRESHOLD0**
-* **\_CFG\_BLOCKLEN\_MTHRESHOLD**
-* **\_CFG\_BLOCKLEN\_SYMMERGE**
-* **\_CFG\_BLOCKLEN\_MERGE**
+* **PMR\_MEMCPY**
+    * **memcpy** override for non raw memory access
+    * default is **memcpy**
+* **PMR\_MEMMOVE**
+    * **memmove** override for non raw memory access
+    * default is **memmove**
+* **PMR\_MALLOC**
+    * **malloc** override
+    * default is **malloc**
+* **PMR\_REALLOC**
+    * **realloc** override
+    * default is **realloc**
+* **PMR\_FREE**
+    * **free** override
+    * default is **free**
+
+Algorithms fine tuning and tweaks using pre-processor directives (see source code comments):
+
+* **\_PMR\_QUEUE\_OVERCOMMIT**
+* **\_PMR\_GCD\_OVERCOMMIT**
+* **\_PMR\_PARALLEL\_MAY\_SPAWN**
+* **\_PMR\_PRESORT**
+* **\_PMR\_USE\_4\_MEM**
+* **\_PMR\_USE\_8\_MEM**
+* **\_PMR\_USE\_16\_MEM**
+* **\_PMR\_RAW\_ACCESS\_ALIGNED**
+* **\_PMR\_TMP\_ROT**
+* **\_PMR\_MIN\_SUBMERGELEN1**
+* **\_PMR\_MIN\_SUBMERGELEN2**
+* **\_PMR\_BLOCKLEN\_MTHRESHOLD0**
+* **\_PMR\_BLOCKLEN\_MTHRESHOLD**
+* **\_PMR\_BLOCKLEN\_SYMMERGE**
+* **\_PMR\_BLOCKLEN\_MERGE**
 
 ### SUPPORTED PLATFORMS
 
-Source code has been built and tested on Mac OS X (10.5 - 10.12) only.
+Source code has been built and tested on macOS (10.5 - 10.15) only.
 
 Future potential:
 
@@ -107,11 +129,16 @@ Future potential:
 
     clang -mmacosx-version-min=10.6 -c pmergesort.c -Ofast -o pmergesort.o
 
+    pgcc -fast -O4 -Mipa=fast,inline,force -DMAC_OS_X_VERSION_MIN_REQUIRED=1060 -DTARGET_CPU_X86_64=1 -DTARGET_OS_MAC=1 -c pmergesort.c -o pmergesort.o
+
+    icc -O3 -std=c99 -c pmergesort.c -o pmergesort.o
+
 _TODO: makefile_
 
 ### PERFORMANCE
 
 Depends on CPU power/number of cores
+Ironically, on practice the single threaded **pmergesort** is faster and with twice lesser memory footprint than standard macOS **mergesort**
 
 Time complexity:
 
